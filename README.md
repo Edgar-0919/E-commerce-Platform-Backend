@@ -195,10 +195,3 @@ Gateway 解析 JWT → 将 userId/username/roles 写入请求头 `X-User-Id`、`
 2. 支付成功后异步持久化到 DB
 3. 订单超时未支付 → 释放 Redis 锁定库存
 
-## 易错提醒
-
-1. MyBatis-Plus 依赖必须用 `mybatis-plus-spring-boot3-starter`（不是 `mybatis-plus-boot-starter`），否则启动报 `factoryBeanObjectType` 错误
-2. RocketMQ 版本 ≥ 2.3.2 才支持 JDK 17，2.2.x 会报 `NoClassDefFoundError: MessageModel`
-3. Sentinel 和 Seata 版本由 SCA BOM 统一管理，模块 POM 中不要单独声明版本号
-4. JDK 版本统一使用 17
-5. Maven 编译插件需要配置 `lombok-mapstruct-binding` 使 Lombok 和 MapStruct 共存
