@@ -1,0 +1,29 @@
+server:
+  port: 8107
+
+spring:
+  application:
+    name: search-service
+  config:
+    import: nacos:${spring.application.name}.yaml
+  elasticsearch:
+    uris: http://localhost:9200
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yaml
+        shared-configs:
+          - data-id: common-config.yaml
+            group: DEFAULT_GROUP
+            refresh: true
+
+knife4j:
+  enable: true
+
+logging:
+  level:
+    com.ecommerce: debug
+    org.springframework.data.elasticsearch: debug

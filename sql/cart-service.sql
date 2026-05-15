@@ -1,0 +1,18 @@
+CREATE DATABASE IF NOT EXISTS db_cart DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE db_cart;
+
+CREATE TABLE t_cart_item (
+    id BIGINT NOT NULL PRIMARY KEY COMMENT '购物车项ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    product_id BIGINT NOT NULL COMMENT '商品ID',
+    sku_id BIGINT NOT NULL COMMENT 'SKU ID',
+    product_name VARCHAR(200) NOT NULL COMMENT '商品名称',
+    spec_desc VARCHAR(300) DEFAULT NULL COMMENT '规格描述',
+    price DECIMAL(12,2) NOT NULL COMMENT '加入时单价',
+    quantity INT NOT NULL DEFAULT 1 COMMENT '数量',
+    selected TINYINT NOT NULL DEFAULT 1 COMMENT '是否选中: 1选中 0未选中',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_user_id (user_id),
+    UNIQUE KEY uk_user_sku (user_id, sku_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物车表';

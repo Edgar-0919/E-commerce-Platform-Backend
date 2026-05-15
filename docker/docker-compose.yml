@@ -1,0 +1,134 @@
+# ============================================
+# 小羊电商平台 - Docker Compose 基础设施配置
+# ============================================
+# 此文件定义了电商平台运行所需的所有基础设施服务：
+# - MySQL: 关系型数据库（商品、订单、用户等核心数据）
+# - Redis: 缓存服务（热点数据、库存锁定、购物车）
+# - Nacos: 服务注册与配置中心
+# - Elasticsearch: 全文搜索引擎（商品搜索）
+# - RocketMQ: 消息队列（异步解耦、最终一致性）
+# ============================================
+
+version: '3.8'
+
+services:
+  # ==================== MySQL 数据库 ====================
+  # 端口: 3306
+  # 用途: 存储用户、商品、订单、库存等结构化数据
+  # 特性: 
+  #   - 使用 utf8mb4 字符集支持中文和 emoji
+  #   - 自动执行 ../sql 目录下的初始化脚本
+  mysql:
+    image: mysql:8.0
+    container_name: ecommerce-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root123    # 数据库密码
+      TZ: Asia/Shanghai               # 时区设置
+    ports:
+      - "3306:3306"                   # 端口映射
+    volumes:
+      - mysql_data:/var/lib/mysql                 # 数据持久化卷
+      - ../sql:/docker-entrypoint-initdb.d        # 初始化SQL脚本目录
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    restart: unless-stopped           # 容器退出时自动重启（除非手动停止）
+
+  # ==================== Redis 缓存 ====================
+  # 端口: 6379
+  # 用途: 
+  #   - 热点数据缓存（商品信息、用户信息）
+  #   - 库存锁定（Lua脚本原子操作防超卖）
+  #   - 购物车数据存储
+  #   - 秒杀场景限流
+  redis:
+    image: redis:7.2-alpine           # 使用轻量级alpine镜像
+    container_name: ecommerce-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data              # 数据持久化卷
+    restart: unless-stopped
+
+  # ==================== Nacos 服务注册中心 ====================
+  # 端口: 8848（主端口）, 9848（健康检查端口）
+  # 用途:
+  #   - 服务注册与发现（微服务架构核心组件）
+  #   - 配置管理（统一管理各服务配置）
+  #   - 健康检查与服务实例管理
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: ecommerce-nacos
+    environment:
+      MODE: standalone                # 单机模式（生产环境使用集群模式）
+      PREFER_HOST_MODE: hostname      # 使用主机名模式
+    ports:
+      - "8848:8848"                   # Nacos主端口
+      - "9848:9848"                   # Nacos健康检查端口
+    volumes:
+      - nacos_data:/home/nacos/data   # 配置和数据持久化
+    restart: unless-stopped
+
+  # ==================== Elasticsearch 搜索引擎 ====================
+  # 端口: 9200（REST API）, 9300（内部通信）
+  # 用途:
+  #   - 商品全文搜索
+  #   - 搜索关键词高亮
+  #   - 聚合分析（分类统计、价格区间等）
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    container_name: ecommerce-es
+    environment:
+      discovery.type: single-node      # 单节点模式（生产环境使用集群）
+      ES_JAVA_OPTS: -Xms512m -Xmx512m # JVM堆内存设置
+      xpack.security.enabled: false   # 禁用安全验证（开发环境）
+    ports:
+      - "9200:9200"                   # REST API端口
+      - "9300:9300"                   # 节点间通信端口
+    volumes:
+      - es_data:/usr/share/elasticsearch/data  # 索引数据持久化
+    restart: unless-stopped
+
+  # ==================== RocketMQ NameServer ====================
+  # 端口: 9876
+  # 用途: 管理 Broker 路由信息，提供服务发现
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.2.0
+    container_name: ecommerce-rmq-namesrv
+    environment:
+      JAVA_OPT_EXT: -server -Xms256m -Xmx256m  # JVM内存设置
+    ports:
+      - "9876:9876"                   # NameServer端口
+    volumes:
+      - rmq_namesrv_data:/home/rocketmq/store  # 数据存储
+    command: sh mqnamesrv             # 启动命令
+    restart: unless-stopped
+
+  # ==================== RocketMQ Broker ====================
+  # 端口: 10909（消息发送）, 10911（消息消费）
+  # 用途: 消息存储和转发核心组件
+  # 依赖: 必须在NameServer启动后启动
+  rocketmq-broker:
+    image: apache/rocketmq:5.2.0
+    container_name: ecommerce-rmq-broker
+    depends_on:
+      - rocketmq-namesrv              # 依赖NameServer服务
+    environment:
+      JAVA_OPT_EXT: -server -Xms512m -Xmx512m  # JVM内存设置
+    ports:
+      - "10909:10909"                 # 消息发送端口
+      - "10911:10911"                 # 消息消费端口
+    volumes:
+      - rmq_broker_data:/home/rocketmq/store   # 消息数据存储
+      - ./scripts:/home/rocketmq/scripts       # 启动脚本目录挂载
+    user: root                           # 以root用户运行，确保能创建目录和设置权限
+    command: sh /home/rocketmq/scripts/start-broker.sh
+    restart: unless-stopped
+
+# ==================== 数据持久化卷 ====================
+# 所有服务的数据都通过Docker Volume持久化，避免容器删除后数据丢失
+volumes:
+  mysql_data:           # MySQL数据库数据
+  redis_data:           # Redis缓存数据
+  nacos_data:           # Nacos配置和注册数据
+  es_data:              # Elasticsearch索引数据
+  rmq_namesrv_data:     # RocketMQ NameServer数据
+  rmq_broker_data:      # RocketMQ Broker消息数据
