@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS db_user DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE db_user;
 
@@ -48,3 +50,8 @@ CREATE TABLE t_user_role (
     role_id BIGINT NOT NULL COMMENT '角色ID',
     UNIQUE KEY uk_user_role (user_id, role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户角色关联表';
+
+INSERT INTO t_role (id, role_code, role_name, description) VALUES
+(1, 'ROLE_USER',     '顾客',   '平台买家，可浏览商品、下单购买'),
+(2, 'ROLE_MERCHANT', '商家',   '平台运营人员，可管理商品、订单、营销'),
+(3, 'ROLE_ADMIN',    '管理员', '超级管理员，拥有全部权限，可管理用户和系统');

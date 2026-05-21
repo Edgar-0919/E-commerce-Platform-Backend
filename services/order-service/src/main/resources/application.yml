@@ -27,6 +27,11 @@ spring:
           - data-id: common-config.yaml
             group: DEFAULT_GROUP
             refresh: true
+    sentinel:
+      transport:
+        dashboard: localhost:8720
+        port: 8722
+      eager: true
 
 mybatis-plus:
   configuration:

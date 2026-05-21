@@ -11,7 +11,7 @@
     </parent>
     <artifactId>common-mq</artifactId>
     <packaging>jar</packaging>
-    <description>消息队列模块：RocketMQ 生产者抽象、消费者配置</description>
+    <description>消息队列模块：Spring Cloud Stream 生产者抽象、消费者配置</description>
 
     <dependencies>
         <dependency>
@@ -19,8 +19,8 @@
             <artifactId>common-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.rocketmq</groupId>
-            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-stream-rabbit</artifactId>
         </dependency>
     </dependencies>
 </project>

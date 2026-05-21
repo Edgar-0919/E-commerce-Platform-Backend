@@ -1,15 +1,15 @@
 package com.ecommerce.core.constant;
 
 /**
- * RocketMQ Topic常量接口
- * 统一管理消息队列Topic和ConsumerGroup：
- * 事件Topic：
+ * Spring Cloud Stream Binding 常量接口
+ * 统一管理消息 binding 和 ConsumerGroup：
+ * 事件 binding：
  * - payment-success: 支付成功事件
  * - refund-success: 退款成功事件
  * - order-created: 订单创建事件
  * - order-cancelled: 订单取消事件
  * - product-status-change: 商品状态变更事件
- * 消费组：按服务划分，每个服务独立消费组
+ * 消费者分组：按服务划分，每个服务独立消费组
  */
 public interface MqTopicConstants {
 

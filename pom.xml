@@ -25,9 +25,9 @@
         <!-- 微服务 -->
         <module>services/user-service</module>
         <module>services/product-service</module>
+        <module>services/inventory-service</module>
         <module>services/order-service</module>
         <module>services/payment-service</module>
-        <module>services/inventory-service</module>
         <module>services/cart-service</module>
         <module>services/search-service</module>
         <module>services/marketing-service</module>
@@ -53,8 +53,8 @@
         <!-- Cache & Lock -->
         <redisson.version>3.30.0</redisson.version>
 
-        <!-- Message Queue — ⚠️ Must be >= 2.3.2 for Spring Boot 3.x / JDK 17 -->
-        <rocketmq-spring-boot.version>2.3.3</rocketmq-spring-boot.version>
+        <!-- Message Queue — Spring Cloud Stream + RabbitMQ binder -->
+        <spring-cloud-stream.version>4.1.0</spring-cloud-stream.version>
 
         <!-- Security -->
         <jjwt.version>0.12.6</jjwt.version>
@@ -91,7 +91,7 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Spring Cloud Alibaba BOM — manages Nacos, Sentinel, Seata versions -->
+            <!-- Spring Cloud Alibaba BOM — manages Nacos, Seata versions -->
             <dependency>
                 <groupId>com.alibaba.cloud</groupId>
                 <artifactId>spring-cloud-alibaba-dependencies</artifactId>
@@ -134,11 +134,11 @@
                 <version>${redisson.version}</version>
             </dependency>
 
-            <!-- RocketMQ Spring Boot Starter -->
+            <!-- Spring Cloud Stream + RabbitMQ Binder — 消息驱动微服务 -->
             <dependency>
-                <groupId>org.apache.rocketmq</groupId>
-                <artifactId>rocketmq-spring-boot-starter</artifactId>
-                <version>${rocketmq-spring-boot.version}</version>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-starter-stream-rabbit</artifactId>
+                <version>${spring-cloud-stream.version}</version>
             </dependency>
 
             <!-- JWT -->

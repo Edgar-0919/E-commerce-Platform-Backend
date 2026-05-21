@@ -6,7 +6,8 @@
 # - Redis: 缓存服务（热点数据、库存锁定、购物车）
 # - Nacos: 服务注册与配置中心
 # - Elasticsearch: 全文搜索引擎（商品搜索）
-# - RocketMQ: 消息队列（异步解耦、最终一致性）
+# - RabbitMQ: 消息队列（Spring Cloud Stream 绑定，异步解耦、最终一致性）
+# - Sentinel Dashboard: 流量监控与熔断降级控制台
 # ============================================
 
 version: '3.8'
@@ -87,40 +88,41 @@ services:
       - es_data:/usr/share/elasticsearch/data  # 索引数据持久化
     restart: unless-stopped
 
-  # ==================== RocketMQ NameServer ====================
-  # 端口: 9876
-  # 用途: 管理 Broker 路由信息，提供服务发现
-  rocketmq-namesrv:
-    image: apache/rocketmq:5.2.0
-    container_name: ecommerce-rmq-namesrv
+  # ==================== RabbitMQ 消息队列 ====================
+  # 端口: 5672 (AMQP), 15672 (Management UI)
+  # 用途:
+  #   - Spring Cloud Stream 消息驱动（异步解耦、最终一致性）
+  #   - 事件: payment-success, order-created, product-status-change, refund-success
+  #   - Management UI: http://localhost:15672 (guest/guest)
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ecommerce-rabbitmq
     environment:
-      JAVA_OPT_EXT: -server -Xms256m -Xmx256m  # JVM内存设置
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     ports:
-      - "9876:9876"                   # NameServer端口
+      - "5672:5672"                   # AMQP 协议端口
+      - "15672:15672"                 # Management UI 端口
     volumes:
-      - rmq_namesrv_data:/home/rocketmq/store  # 数据存储
-    command: sh mqnamesrv             # 启动命令
+      - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
 
-  # ==================== RocketMQ Broker ====================
-  # 端口: 10909（消息发送）, 10911（消息消费）
-  # 用途: 消息存储和转发核心组件
-  # 依赖: 必须在NameServer启动后启动
-  rocketmq-broker:
-    image: apache/rocketmq:5.2.0
-    container_name: ecommerce-rmq-broker
-    depends_on:
-      - rocketmq-namesrv              # 依赖NameServer服务
+  # ==================== Sentinel Dashboard 控制台 ====================
+  # 端口: 8720
+  # 用途:
+  #   - 实时流量监控（QPS、响应时间、线程数）
+  #   - 熔断降级规则可视化配置
+  #   - 热点参数限流管理
+  # 访问: http://localhost:8720 (sentinel/sentinel)
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: ecommerce-sentinel
     environment:
-      JAVA_OPT_EXT: -server -Xms512m -Xmx512m  # JVM内存设置
+      SERVER_PORT: 8080
+      SENTINEL_DASHBOARD_USERNAME: sentinel
+      SENTINEL_DASHBOARD_PASSWORD: sentinel
     ports:
-      - "10909:10909"                 # 消息发送端口
-      - "10911:10911"                 # 消息消费端口
-    volumes:
-      - rmq_broker_data:/home/rocketmq/store   # 消息数据存储
-      - ./scripts:/home/rocketmq/scripts       # 启动脚本目录挂载
-    user: root                           # 以root用户运行，确保能创建目录和设置权限
-    command: sh /home/rocketmq/scripts/start-broker.sh
+      - "8720:8080"                   # Dashboard 访问端口
     restart: unless-stopped
 
 # ==================== 数据持久化卷 ====================
@@ -130,5 +132,4 @@ volumes:
   redis_data:           # Redis缓存数据
   nacos_data:           # Nacos配置和注册数据
   es_data:              # Elasticsearch索引数据
-  rmq_namesrv_data:     # RocketMQ NameServer数据
-  rmq_broker_data:      # RocketMQ Broker消息数据
+  rabbitmq_data:        # RabbitMQ消息队列数据

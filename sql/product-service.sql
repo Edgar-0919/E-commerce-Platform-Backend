@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS db_product DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE db_product;
 

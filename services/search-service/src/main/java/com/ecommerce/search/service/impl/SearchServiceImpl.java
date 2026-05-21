@@ -33,44 +33,49 @@ public class SearchServiceImpl implements SearchService {
                                          BigDecimal minPrice, BigDecimal maxPrice,
                                          String sortField, String sortOrder,
                                          int page, int size) {
-        Criteria criteria = new Criteria("status").is(1);
+        try {
+            Criteria criteria = new Criteria("status").is(1);
 
-        if (StringUtils.hasText(keyword)) {
-            criteria = criteria.and(new Criteria("name").contains(keyword).or(new Criteria("description").contains(keyword)));
-        }
-        if (categoryId != null) {
-            criteria = criteria.and("categoryId").is(categoryId);
-        }
-        if (brandId != null) {
-            criteria = criteria.and("brandId").is(brandId);
-        }
-        if (minPrice != null || maxPrice != null) {
-            Criteria priceCriteria = new Criteria("price");
-            if (minPrice != null) {
-                priceCriteria = priceCriteria.greaterThanEqual(minPrice.doubleValue());
+            if (StringUtils.hasText(keyword)) {
+                criteria = criteria.and(new Criteria("name").contains(keyword).or(new Criteria("description").contains(keyword)));
             }
-            if (maxPrice != null) {
-                priceCriteria = priceCriteria.lessThanEqual(maxPrice.doubleValue());
+            if (categoryId != null) {
+                criteria = criteria.and("categoryId").is(categoryId);
             }
-            criteria = criteria.and(priceCriteria);
+            if (brandId != null) {
+                criteria = criteria.and("brandId").is(brandId);
+            }
+            if (minPrice != null || maxPrice != null) {
+                Criteria priceCriteria = new Criteria("price");
+                if (minPrice != null) {
+                    priceCriteria = priceCriteria.greaterThanEqual(minPrice.doubleValue());
+                }
+                if (maxPrice != null) {
+                    priceCriteria = priceCriteria.lessThanEqual(maxPrice.doubleValue());
+                }
+                criteria = criteria.and(priceCriteria);
+            }
+
+            Sort sort = Sort.unsorted();
+            if (StringUtils.hasText(sortField)) {
+                sort = "asc".equalsIgnoreCase(sortOrder)
+                        ? Sort.by(sortField).ascending()
+                        : Sort.by(sortField).descending();
+            }
+
+            Query query = new CriteriaQuery(criteria)
+                    .setPageable(PageRequest.of(page - 1, size))
+                    .addSort(sort);
+
+            SearchHits<ProductDocument> hits = elasticsearchOperations.search(query, ProductDocument.class);
+
+            return hits.getSearchHits().stream()
+                    .map(hit -> hit.getContent())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("搜索异常，ES可能不可用: keyword={}", keyword, e);
+            return Collections.emptyList();
         }
-
-        Sort sort = Sort.unsorted();
-        if (StringUtils.hasText(sortField)) {
-            sort = "asc".equalsIgnoreCase(sortOrder)
-                    ? Sort.by(sortField).ascending()
-                    : Sort.by(sortField).descending();
-        }
-
-        Query query = new CriteriaQuery(criteria)
-                .setPageable(PageRequest.of(page - 1, size))
-                .addSort(sort);
-
-        SearchHits<ProductDocument> hits = elasticsearchOperations.search(query, ProductDocument.class);
-
-        return hits.getSearchHits().stream()
-                .map(hit -> hit.getContent())
-                .collect(Collectors.toList());
     }
 
     @Override

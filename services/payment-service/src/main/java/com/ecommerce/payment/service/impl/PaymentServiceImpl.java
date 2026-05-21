@@ -12,6 +12,7 @@ import com.ecommerce.payment.model.entity.Payment;
 import com.ecommerce.payment.model.entity.PaymentLog;
 import com.ecommerce.payment.model.entity.Refund;
 import com.ecommerce.payment.service.PaymentService;
+import com.ecommerce.payment.feign.OrderFeignClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -28,6 +30,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentMapper paymentMapper;
     private final RefundMapper refundMapper;
     private final PaymentLogMapper paymentLogMapper;
+    private final OrderFeignClient orderFeignClient;
 
     @Override
     @Transactional
@@ -87,7 +90,17 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info("支付回调处理成功: paymentNo={}, channel={}, transactionNo={}", paymentNo, channel, transactionNo);
 
-        // TODO: Send RocketMQ message payment-success → inventory/order service
+        // 通过 Feign 调用 order-service 更新订单状态为"已支付"
+        try {
+            orderFeignClient.updateStatus(payment.getOrderId(),
+                    Map.of("status", 2, "operator", "PAYMENT_CALLBACK"));
+            log.info("订单状态已更新: orderId={}, status=PAID", payment.getOrderId());
+        } catch (Exception e) {
+            log.error("Feign调用-更新订单状态失败: orderId={}", payment.getOrderId(), e);
+            // 支付已记录成功，订单状态更新失败通过补偿任务重试
+        }
+
+        // TODO: 发送 Spring Cloud Stream 消息 payment-success → inventory-service 扣减库存
     }
 
     @Override
@@ -123,7 +136,16 @@ public class PaymentServiceImpl implements PaymentService {
 
         log.info("退款处理成功: refundNo={}, orderId={}, amount={}", refund.getRefundNo(), orderId, amount);
 
-        // TODO: Send RocketMQ message refund-success → order service
+        // 通过 Feign 调用 order-service 更新订单状态为"已退款"
+        try {
+            orderFeignClient.updateStatus(orderId,
+                    Map.of("status", 7, "operator", "REFUND_CALLBACK"));
+            log.info("订单状态已更新: orderId={}, status=REFUNDED", orderId);
+        } catch (Exception e) {
+            log.error("Feign调用-更新退款状态失败: orderId={}", orderId, e);
+        }
+
+        // TODO: 发送 Spring Cloud Stream 消息 refund-success
     }
 
     @Override

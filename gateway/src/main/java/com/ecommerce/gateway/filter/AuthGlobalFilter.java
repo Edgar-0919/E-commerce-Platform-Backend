@@ -18,27 +18,20 @@ import reactor.core.publisher.Mono;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * 网关认证全局过滤器
- * 职责：
- * 1. 拦截所有请求，对白名单路径直接放行
- * 2. 解析JWT Token验证用户身份
- * 3. 将用户信息透传到下游微服务
- * 执行顺序：-100（优先于业务过滤器执行）
- */
 @Slf4j
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private final AntPathMatcher matcher = new AntPathMatcher();
 
-    // 白名单路径：无需认证即可访问
-    // /api/product/** 和 /api/search/** 为B端/C端共享浏览路径
-    // Knife4j 文档和 Swagger 资源也需要放行
     private static final List<String> WHITE_LIST = Arrays.asList(
             "/api/user/login",
             "/api/user/register",
-            "/api/product/**",
+            "/api/product/page",
+            "/api/product/*",
+            "/api/product/category/tree",
+            "/api/product/sku/**",
+            "/api/product/brand/**",
             "/api/search/**",
             "/doc.html",
             "/webjars/**",
@@ -46,16 +39,17 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/swagger-resources/**"
     );
 
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String ROLE_MERCHANT = "ROLE_MERCHANT";
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // 白名单直接放行
         if (isWhiteListed(path)) {
             return chain.filter(exchange);
         }
 
-        // 获取Token
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith(GlobalConstants.TOKEN_PREFIX)) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
@@ -69,7 +63,25 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             return exchange.getResponse().setComplete();
         }
 
-        // 透传用户信息到下游微服务：避免每个服务重复解析JWT
+        if (isAdminPath(path)) {
+            List<String> roles = payload.getRoles();
+            if (roles == null) {
+                exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                return exchange.getResponse().setComplete();
+            }
+            if (isAdminOnlyPath(path)) {
+                if (!roles.contains(ROLE_ADMIN)) {
+                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                    return exchange.getResponse().setComplete();
+                }
+            } else {
+                if (!roles.contains(ROLE_ADMIN) && !roles.contains(ROLE_MERCHANT)) {
+                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                    return exchange.getResponse().setComplete();
+                }
+            }
+        }
+
         ServerHttpRequest request = exchange.getRequest().mutate()
                 .header(GlobalConstants.USER_ID_HEADER, String.valueOf(payload.getUserId()))
                 .header(GlobalConstants.USERNAME_HEADER, payload.getUsername())
@@ -84,9 +96,18 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         return WHITE_LIST.stream().anyMatch(pattern -> matcher.match(pattern, path));
     }
 
+    private boolean isAdminPath(String path) {
+        return path.startsWith("/api/admin/");
+    }
+
+    private boolean isAdminOnlyPath(String path) {
+        return path.startsWith("/api/admin/users") || 
+               path.startsWith("/api/admin/brands") || 
+               path.startsWith("/api/admin/categories");
+    }
+
     @Override
     public int getOrder() {
-        // -100 确保在所有业务过滤器之前执行认证
         return -100;
     }
 }

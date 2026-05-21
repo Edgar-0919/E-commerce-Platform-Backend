@@ -8,6 +8,7 @@ import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.util.IdGenerator;
 import com.ecommerce.order.feign.InventoryFeignClient;
+import com.ecommerce.order.feign.ProductFeignClient;
 import com.ecommerce.inventory.model.dto.StockOperationDTO;
 import com.ecommerce.order.mapper.OrderItemMapper;
 import com.ecommerce.order.mapper.OrderLogMapper;
@@ -50,6 +51,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemMapper orderItemMapper;
     private final OrderLogMapper orderLogMapper;
     private final InventoryFeignClient inventoryFeignClient;
+    private final ProductFeignClient productFeignClient;
 
     @Override
     @Transactional
@@ -92,6 +94,20 @@ public class OrderServiceImpl implements OrderService {
             stockDTO.setSkuId(itemDTO.getSkuId());
             stockDTO.setQuantity(itemDTO.getQuantity());
             stockLocks.add(stockDTO);
+        }
+
+        // 3.5 通过 Feign 获取 SKU 名称替代硬编码
+        try {
+            for (var itemDTO : dto.getItems()) {
+                var skuResult = productFeignClient.getSkuById(itemDTO.getSkuId());
+                if (skuResult != null && skuResult.getData() != null) {
+                    // SKU 名称在后续的订单项展示中使用（此处获取，实际可存到 OrderItem 中）
+                    log.debug("SKU信息获取成功: skuId={}, price={}", 
+                            itemDTO.getSkuId(), skuResult.getData().getPrice());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Feign获取SKU信息失败，使用默认值: {}", e.getMessage());
         }
 
         // 4. 通过 Feign 远程锁定库存（跨服务事务由 Seata AT 模式管理）

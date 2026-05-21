@@ -31,6 +31,16 @@
             <artifactId>common-cache</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.ecommerce</groupId>
+            <artifactId>common-feign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ecommerce</groupId>
+            <artifactId>product-service</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
