@@ -24,5 +24,5 @@ public class AddressDTO {
     @NotBlank(message = "详细地址不能为空")
     private String detail;
 
-    private Integer isDefault;
+    private Boolean isDefault;
 }

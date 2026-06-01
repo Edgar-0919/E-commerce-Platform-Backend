@@ -36,10 +36,27 @@ spring:
         dashboard: localhost:8720
         port: 8724
       eager: true
+    stream:
+      default-binder: rabbit
+      function:
+        definition: paymentSuccess
+      bindings:
+        paymentSuccess-in-0:
+          destination: payment-success
+          group: ${spring.application.name}
+          content-type: application/json
+      rabbit:
+        bindings:
+          paymentSuccess-in-0:
+            consumer:
+              auto-bind-dlq: true
+              republish-to-dlq: true
 
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.ecommerce.inventory.model.entity
 
 knife4j:
   enable: true
@@ -47,3 +64,32 @@ knife4j:
 logging:
   level:
     com.ecommerce: debug
+
+seata:
+  registry:
+    type: nacos
+    nacos:
+      server-addr: localhost:8848
+      group: SEATA_GROUP
+  config:
+    type: nacos
+    nacos:
+      server-addr: localhost:8848
+      group: SEATA_GROUP
+  tx-service-group: ecommerce-tx-group
+  service:
+    vgroup-mapping:
+      ecommerce-tx-group: default
+  data-source-proxy-mode: AT
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

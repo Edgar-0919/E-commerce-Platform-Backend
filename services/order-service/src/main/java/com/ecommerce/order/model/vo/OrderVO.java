@@ -25,16 +25,3 @@ public class OrderVO {
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }
-
-@Data
-class OrderItemVO {
-    private Long id;
-    private Long productId;
-    private Long skuId;
-    private String productName;
-    private String specDesc;
-    private BigDecimal price;
-    private Integer quantity;
-    private BigDecimal amount;
-    private String image;
-}

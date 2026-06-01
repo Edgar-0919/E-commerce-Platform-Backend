@@ -40,6 +40,11 @@ public class AddressController {
     public Result<Void> save(@Valid @RequestBody AddressDTO dto) {
         UserAddress address = new UserAddress();
         BeanUtils.copyProperties(dto, address);
+        if (dto.getIsDefault() != null) {
+            address.setIsDefault(dto.getIsDefault() ? 1 : 0);
+        } else {
+            address.setIsDefault(0);
+        }
         address.setUserId(UserContext.currentUserId());
         addressService.save(address);
         return Result.success();
@@ -50,6 +55,9 @@ public class AddressController {
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody AddressDTO dto) {
         UserAddress address = new UserAddress();
         BeanUtils.copyProperties(dto, address);
+        if (dto.getIsDefault() != null) {
+            address.setIsDefault(dto.getIsDefault() ? 1 : 0);
+        }
         address.setId(id);
         addressService.update(address);
         return Result.success();

@@ -32,6 +32,11 @@ public class UserAddressServiceImpl implements UserAddressService {
         if (addr == null) {
             throw new BusinessException(ResultCodeEnum.NOT_FOUND.getCode(), "地址不存在");
         }
+        // 校验地址是否属于当前用户，防止越权
+        Long currentUserId = com.ecommerce.core.model.UserContext.currentUserId();
+        if (currentUserId != null && !addr.getUserId().equals(currentUserId)) {
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN.getCode(), "无权访问此地址");
+        }
         return addr;
     }
 

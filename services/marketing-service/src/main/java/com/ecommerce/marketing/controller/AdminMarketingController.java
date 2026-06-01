@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
+import com.ecommerce.marketing.mapper.BannerMapper;
 import com.ecommerce.marketing.mapper.CouponTemplateMapper;
 import com.ecommerce.marketing.mapper.PromotionMapper;
+import com.ecommerce.marketing.model.entity.Banner;
 import com.ecommerce.marketing.model.entity.CouponTemplate;
 import com.ecommerce.marketing.model.entity.Promotion;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +30,7 @@ public class AdminMarketingController {
 
     private final CouponTemplateMapper couponTemplateMapper;
     private final PromotionMapper promotionMapper;
+    private final BannerMapper bannerMapper;
     private final ObjectMapper objectMapper;
 
     // ======================== 优惠券模板 ========================
@@ -172,6 +175,86 @@ public class AdminMarketingController {
         promotion.setStatus((Integer) body.get("status"));
         promotion.setUpdateTime(LocalDateTime.now());
         promotionMapper.updateById(promotion);
+        return Result.success();
+    }
+
+    // ======================== 轮播图管理 ========================
+
+    @GetMapping("/banners")
+    @Operation(summary = "轮播图列表")
+    public Result<PageResult<Banner>> listBanners(
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "20") Integer pageSize,
+            @RequestParam(required = false) String position,
+            @RequestParam(required = false) Integer status) {
+        LambdaQueryWrapper<Banner> wrapper = new LambdaQueryWrapper<Banner>()
+                .eq(StringUtils.hasText(position), Banner::getPosition, position)
+                .eq(status != null, Banner::getStatus, status)
+                .orderByAsc(Banner::getSort);
+        Page<Banner> p = bannerMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        return Result.success(PageResult.of(p.getCurrent(), p.getSize(), p.getTotal(), p.getRecords()));
+    }
+
+    @PostMapping("/banners")
+    @Operation(summary = "创建轮播图")
+    public Result<Void> createBanner(@RequestBody Map<String, Object> body) {
+        Banner banner = new Banner();
+        banner.setImage((String) body.get("image"));
+        banner.setTitle((String) body.get("title"));
+        banner.setDescription((String) body.get("description"));
+        banner.setPosition((String) body.getOrDefault("position", "home"));
+        banner.setLinkUrl((String) body.get("linkUrl"));
+        banner.setSort((Integer) body.getOrDefault("sort", 0));
+        banner.setStatus((Integer) body.getOrDefault("status", 1));
+        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
+        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        banner.setCreateTime(LocalDateTime.now());
+        banner.setUpdateTime(LocalDateTime.now());
+        bannerMapper.insert(banner);
+        return Result.success();
+    }
+
+    @PutMapping("/banners/{id}")
+    @Operation(summary = "更新轮播图")
+    public Result<Void> updateBanner(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Banner banner = bannerMapper.selectById(id);
+        if (banner == null) {
+            return Result.fail(404, "轮播图不存在");
+        }
+        if (body.containsKey("image")) banner.setImage((String) body.get("image"));
+        if (body.containsKey("title")) banner.setTitle((String) body.get("title"));
+        if (body.containsKey("description")) banner.setDescription((String) body.get("description"));
+        if (body.containsKey("position")) banner.setPosition((String) body.get("position"));
+        if (body.containsKey("linkUrl")) banner.setLinkUrl((String) body.get("linkUrl"));
+        if (body.containsKey("sort")) banner.setSort((Integer) body.get("sort"));
+        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
+        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        banner.setUpdateTime(LocalDateTime.now());
+        bannerMapper.updateById(banner);
+        return Result.success();
+    }
+
+    @PutMapping("/banners/{id}/status")
+    @Operation(summary = "启用/禁用轮播图")
+    public Result<Void> toggleBannerStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        Banner banner = bannerMapper.selectById(id);
+        if (banner == null) {
+            return Result.fail(404, "轮播图不存在");
+        }
+        banner.setStatus((Integer) body.get("status"));
+        banner.setUpdateTime(LocalDateTime.now());
+        bannerMapper.updateById(banner);
+        return Result.success();
+    }
+
+    @DeleteMapping("/banners/{id}")
+    @Operation(summary = "删除轮播图")
+    public Result<Void> deleteBanner(@PathVariable Long id) {
+        Banner banner = bannerMapper.selectById(id);
+        if (banner == null) {
+            return Result.fail(404, "轮播图不存在");
+        }
+        bannerMapper.deleteById(id);
         return Result.success();
     }
 }

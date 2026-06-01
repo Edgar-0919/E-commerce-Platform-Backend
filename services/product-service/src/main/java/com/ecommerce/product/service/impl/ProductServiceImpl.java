@@ -14,6 +14,7 @@ import com.ecommerce.product.model.entity.*;
 import com.ecommerce.product.model.vo.CategoryVO;
 import com.ecommerce.product.model.vo.ProductVO;
 import com.ecommerce.product.model.vo.SkuVO;
+import com.ecommerce.product.mq.ProductMqProducer;
 import com.ecommerce.product.service.ProductService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,6 +53,7 @@ public class ProductServiceImpl implements ProductService {
     private final SkuMapper skuMapper;
     private final SpecGroupMapper specGroupMapper;
     private final SpecParamMapper specParamMapper;
+    private final ProductMqProducer productMqProducer;
 
     @Override
     public PageResult<ProductVO> page(ProductQueryDTO query) {
@@ -101,6 +104,8 @@ public class ProductServiceImpl implements ProductService {
             }
         }
         log.info("商品创建成功: id={}, name={}", product.getId(), product.getName());
+        // 发送 MQ 异步同步 ES 索引
+        sendProductChangeMq(product);
     }
 
     @Override
@@ -114,6 +119,8 @@ public class ProductServiceImpl implements ProductService {
         product.setImages(dto.getImages() != null ? JsonUtils.toJson(dto.getImages()) : null);
         productMapper.updateById(product);
         log.info("商品更新成功: id={}", id);
+        // 发送 MQ 异步同步 ES 索引
+        sendProductChangeMq(product);
     }
 
     @Override
@@ -124,6 +131,8 @@ public class ProductServiceImpl implements ProductService {
         }
         product.setStatus(status);
         productMapper.updateById(product);
+        // 发送 MQ 异步同步 ES 索引
+        sendProductChangeMq(product);
     }
 
     @Override
@@ -175,8 +184,10 @@ public class ProductServiceImpl implements ProductService {
                     new TypeReference<List<String>>() {}));
         }
 
-        Category category = categoryMapper.selectById(product.getCategoryId());
-        if (category != null) vo.setCategoryName(category.getName());
+        if (product.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(product.getCategoryId());
+            if (category != null) vo.setCategoryName(category.getName());
+        }
 
         if (product.getBrandId() != null) {
             Brand brand = brandMapper.selectById(product.getBrandId());
@@ -185,7 +196,11 @@ public class ProductServiceImpl implements ProductService {
 
         List<Sku> skus = skuMapper.selectList(new LambdaQueryWrapper<Sku>()
                 .eq(Sku::getProductId, product.getId()));
-        vo.setSkus(skus.stream().map(this::toSkuVO).collect(Collectors.toList()));
+        if (skus != null && !skus.isEmpty()) {
+            vo.setSkus(skus.stream().map(this::toSkuVO).collect(Collectors.toList()));
+        } else {
+            vo.setSkus(new ArrayList<>());
+        }
 
         return vo;
     }
@@ -197,6 +212,67 @@ public class ProductServiceImpl implements ProductService {
             vo.setSpecValues(JsonUtils.fromJson(sku.getSpecValues(),
                     new TypeReference<Map<String, String>>() {}));
         }
+        // 关联查询 Product 表获取商品名称，供订单服务创建订单项时动态获取真实商品名
+        Product product = productMapper.selectById(sku.getProductId());
+        if (product != null) {
+            vo.setProductName(product.getName());
+        }
         return vo;
+    }
+
+    // ==================== ES 索引同步 ====================
+
+    @Override
+    public void delete(Long id) {
+        Product product = productMapper.selectById(id);
+        if (product != null) {
+            productMapper.deleteById(id);
+            log.info("商品删除: id={}, name={}", id, product.getName());
+            // 发送 MQ 通知 ES 删除索引
+            productMqProducer.sendProductDelete(id);
+        }
+    }
+
+    @Override
+    public List<ProductVO> getAllOnSale() {
+        List<Product> products = productMapper.selectList(
+                new LambdaQueryWrapper<Product>()
+                        .eq(Product::getStatus, 1)
+                        .orderByDesc(Product::getId));
+        return products.stream().map(this::toVO).collect(Collectors.toList());
+    }
+
+    /** 构建并发送商品变更 MQ 消息（异步同步 ES） */
+    private void sendProductChangeMq(Product product) {
+        try {
+            ProductVO vo = toVO(product);
+            // 取最低价 SKU 作为搜索价格
+            BigDecimal minPrice = null;
+            BigDecimal minMarketPrice = null;
+            int totalStock = 0;
+            if (vo.getSkus() != null && !vo.getSkus().isEmpty()) {
+                for (SkuVO sku : vo.getSkus()) {
+                    if (sku.getPrice() != null) {
+                        minPrice = minPrice == null ? sku.getPrice()
+                                : minPrice.min(sku.getPrice());
+                    }
+                    if (sku.getMarketPrice() != null) {
+                        minMarketPrice = minMarketPrice == null ? sku.getMarketPrice()
+                                : minMarketPrice.min(sku.getMarketPrice());
+                    }
+                    if (sku.getStock() != null) {
+                        totalStock += sku.getStock();
+                    }
+                }
+            }
+            productMqProducer.sendProductChange(
+                    product.getId(), product.getName(),
+                    product.getCategoryId(), vo.getCategoryName(),
+                    product.getBrandId(), vo.getBrandName(),
+                    product.getMainImage(), product.getDescription(),
+                    product.getStatus(), minPrice, minMarketPrice, totalStock);
+        } catch (Exception e) {
+            log.error("发送商品变更MQ失败: id={}, name={}", product.getId(), product.getName(), e);
+        }
     }
 }

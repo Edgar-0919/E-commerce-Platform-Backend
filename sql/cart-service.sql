@@ -11,6 +11,7 @@ CREATE TABLE t_cart_item (
     product_name VARCHAR(200) NOT NULL COMMENT '商品名称',
     spec_desc VARCHAR(300) DEFAULT NULL COMMENT '规格描述',
     price DECIMAL(12,2) NOT NULL COMMENT '加入时单价',
+    main_image VARCHAR(255) DEFAULT NULL COMMENT '商品图片',
     quantity INT NOT NULL DEFAULT 1 COMMENT '数量',
     selected TINYINT NOT NULL DEFAULT 1 COMMENT '是否选中: 1选中 0未选中',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

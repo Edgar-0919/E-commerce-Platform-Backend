@@ -49,3 +49,17 @@ CREATE TABLE t_order_log (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_order_id (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单操作日志表';
+
+-- Seata AT 模式所需的 undo_log 表，用于回滚 SQL 的逆向补偿
+CREATE TABLE IF NOT EXISTS `undo_log` (
+    `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+    `branch_id` BIGINT(20) NOT NULL,
+    `xid` VARCHAR(100) NOT NULL,
+    `context` VARCHAR(128) NOT NULL,
+    `rollback_info` LONGBLOB NOT NULL,
+    `log_status` INT(11) NOT NULL,
+    `log_created` DATETIME NOT NULL,
+    `log_modified` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `ux_undo_log` (`xid`, `branch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

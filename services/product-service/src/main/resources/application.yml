@@ -32,6 +32,17 @@ spring:
         dashboard: localhost:8720
         port: 8721
       eager: true
+    stream:
+      default-binder: rabbit
+      bindings:
+        productChange-out-0:
+          destination: product-change
+          content-type: application/json
+      rabbit:
+        bindings:
+          productChange-out-0:
+            producer:
+              delayed-exchange: true
 
 mybatis-plus:
   configuration:
@@ -48,3 +59,15 @@ knife4j:
 logging:
   level:
     com.ecommerce: debug
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

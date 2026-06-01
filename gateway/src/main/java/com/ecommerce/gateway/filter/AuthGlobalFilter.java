@@ -33,6 +33,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/product/sku/**",
             "/api/product/brand/**",
             "/api/search/**",
+            "/api/marketing/banner/**",
             "/doc.html",
             "/webjars/**",
             "/v3/api-docs/**",

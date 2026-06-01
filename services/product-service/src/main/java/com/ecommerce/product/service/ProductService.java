@@ -25,4 +25,10 @@ public interface ProductService {
     List<CategoryVO> categoryTree();
 
     SkuVO getSkuById(Long id);
+
+    /** 删除商品（逻辑删除） */
+    void delete(Long id);
+
+    /** 获取全部上架商品（供 ES 全量索引） */
+    List<ProductVO> getAllOnSale();
 }

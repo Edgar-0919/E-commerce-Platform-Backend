@@ -2,7 +2,6 @@ package com.ecommerce.product.controller;
 
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
-import com.ecommerce.product.mapper.ProductMapper;
 import com.ecommerce.product.model.dto.ProductQueryDTO;
 import com.ecommerce.product.model.dto.ProductSaveDTO;
 import com.ecommerce.product.model.vo.ProductVO;
@@ -20,7 +19,6 @@ import org.springframework.web.bind.annotation.*;
 public class AdminProductController {
 
     private final ProductService productService;
-    private final ProductMapper productMapper;
 
     @GetMapping
     @Operation(summary = "商品列表")
@@ -58,7 +56,7 @@ public class AdminProductController {
     @DeleteMapping("/{id}")
     @Operation(summary = "删除商品（逻辑删除）")
     public Result<Void> delete(@PathVariable Long id) {
-        productMapper.deleteById(id);
+        productService.delete(id);
         return Result.success();
     }
 }

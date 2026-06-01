@@ -97,7 +97,9 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     // 释放：订单取消/超时，Redis Lua 退回锁定库存到可用库存
+    // @Transactional 确保 Redis 操作与后续 DB 补偿写入的一致性
     @Override
+    @Transactional
     public void releaseStock(List<StockOperationDTO> items) {
         for (StockOperationDTO item : items) {
             String stockKey = RedisKeyConstants.STOCK_PREFIX + item.getSkuId();
@@ -112,6 +114,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     // 确认扣减：支付成功后，清除 Redis 锁定明细 + 持久化到 DB
     // 注意：stock key 在锁定时已扣减，此处仅清理 lock key + DB 落库
+    // 使用乐观锁（version 字段）防止并发扣减时的数据覆盖
     @Override
     @Transactional
     public void deductStock(List<StockOperationDTO> items) {
@@ -121,14 +124,23 @@ public class InventoryServiceImpl implements InventoryService {
                     Collections.singletonList(lockKey),
                     item.getQuantity());
 
-            // Persist to DB
-            Stock stock = stockMapper.selectOne(new LambdaQueryWrapper<Stock>()
-                    .eq(Stock::getSkuId, item.getSkuId()));
-            if (stock != null) {
-                stock.setTotalStock(stock.getTotalStock() - item.getQuantity());
-                stock.setLockedStock(Math.max(0, stock.getLockedStock() - item.getQuantity()));
-                stock.setAvailableStock(stock.getTotalStock() - stock.getLockedStock());
-                stockMapper.updateById(stock);
+            // 使用乐观锁更新 DB：MyBatis-Plus 的 updateById 会检查 version 字段
+            // 若 version 不匹配（被其他事务修改），更新行数为 0，此处循环重试最多 3 次
+            int retry = 0;
+            while (retry < 3) {
+                Stock stock = stockMapper.selectOne(new LambdaQueryWrapper<Stock>()
+                        .eq(Stock::getSkuId, item.getSkuId()));
+                if (stock != null) {
+                    stock.setTotalStock(stock.getTotalStock() - item.getQuantity());
+                    stock.setLockedStock(Math.max(0, stock.getLockedStock() - item.getQuantity()));
+                    stock.setAvailableStock(stock.getTotalStock() - stock.getLockedStock());
+                    int updated = stockMapper.updateById(stock);
+                    if (updated > 0) break; // 乐观锁更新成功
+                } else {
+                    break; // stock 不存在，跳过
+                }
+                retry++;
+                log.warn("库存扣减乐观锁冲突，重试 {}/3: skuId={}, orderId={}", retry, item.getSkuId(), item.getOrderId());
             }
 
             // Record log

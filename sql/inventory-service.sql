@@ -29,3 +29,16 @@ CREATE TABLE t_stock_log (
     KEY idx_sku_id (sku_id),
     KEY idx_order_id (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存变更日志表';
+
+CREATE TABLE IF NOT EXISTS `undo_log` (
+    `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+    `branch_id` BIGINT(20) NOT NULL,
+    `xid` VARCHAR(100) NOT NULL,
+    `context` VARCHAR(128) NOT NULL,
+    `rollback_info` LONGBLOB NOT NULL,
+    `log_status` INT(11) NOT NULL,
+    `log_created` DATETIME NOT NULL,
+    `log_modified` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `ux_undo_log` (`xid`, `branch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

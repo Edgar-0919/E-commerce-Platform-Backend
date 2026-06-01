@@ -35,6 +35,10 @@
             <artifactId>common-feign</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.ecommerce</groupId>
+            <artifactId>common-mq</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
@@ -51,16 +55,12 @@
             <artifactId>druid-spring-boot-3-starter</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.ecommerce</groupId>
-            <artifactId>inventory-service</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-            <scope>compile</scope>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.ecommerce</groupId>
-            <artifactId>product-service</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-            <scope>compile</scope>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
         </dependency>
     </dependencies>
 
@@ -69,6 +69,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <jvmArguments>-Duser.home=./target/user-home -Dcsp.sentinel.log.dir=./target/logs/sentinel</jvmArguments>
+                </configuration>
             </plugin>
         </plugins>
     </build>

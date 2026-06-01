@@ -30,6 +30,22 @@ CREATE TABLE t_user_coupon (
     KEY idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户优惠券表';
 
+CREATE TABLE t_banner (
+    id BIGINT NOT NULL PRIMARY KEY COMMENT '轮播图ID',
+    image VARCHAR(500) NOT NULL COMMENT '图片URL',
+    title VARCHAR(100) DEFAULT NULL COMMENT '标题',
+    description VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    position VARCHAR(50) NOT NULL DEFAULT 'home' COMMENT '位置标识: home-首页轮播',
+    link_url VARCHAR(500) DEFAULT NULL COMMENT '跳转链接',
+    sort INT NOT NULL DEFAULT 0 COMMENT '排序(升序)',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1启用 0禁用',
+    start_time DATETIME DEFAULT NULL COMMENT '开始时间(为空则立即生效)',
+    end_time DATETIME DEFAULT NULL COMMENT '结束时间(为空则永久有效)',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_position_status (position, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='轮播图表';
+
 CREATE TABLE t_promotion (
     id BIGINT NOT NULL PRIMARY KEY COMMENT '促销ID',
     name VARCHAR(100) NOT NULL COMMENT '促销名称',
@@ -63,3 +79,16 @@ CREATE TABLE t_points_log (
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分变动日志表';
+
+CREATE TABLE IF NOT EXISTS `undo_log` (
+    `id` BIGINT(20) NOT NULL AUTO_INCREMENT,
+    `branch_id` BIGINT(20) NOT NULL,
+    `xid` VARCHAR(100) NOT NULL,
+    `context` VARCHAR(128) NOT NULL,
+    `rollback_info` LONGBLOB NOT NULL,
+    `log_status` INT(11) NOT NULL,
+    `log_created` DATETIME NOT NULL,
+    `log_modified` DATETIME NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `ux_undo_log` (`xid`, `branch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

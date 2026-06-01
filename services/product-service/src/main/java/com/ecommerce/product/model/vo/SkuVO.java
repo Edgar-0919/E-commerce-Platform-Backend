@@ -17,4 +17,6 @@ public class SkuVO {
     private String image;
     private Integer stock;
     private Integer status;
+    /** 商品名称 — 从 Product 表关联获取，供订单服务显示使用 */
+    private String productName;
 }

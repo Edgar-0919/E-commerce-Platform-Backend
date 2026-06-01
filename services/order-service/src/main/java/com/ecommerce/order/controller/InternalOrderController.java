@@ -28,7 +28,7 @@ public class InternalOrderController {
     /** 更新订单状态（支付回调、退款回调等事件驱动） */
     @PutMapping("/{id}/status")
     @Operation(summary = "更新订单状态")
-    public Result<Void> updateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public Result<Void> updateStatus(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         Integer status = (Integer) body.get("status");
         String operator = (String) body.getOrDefault("operator", "SYSTEM");
         orderService.updateStatus(id, status, operator);

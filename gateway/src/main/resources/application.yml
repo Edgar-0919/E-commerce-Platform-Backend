@@ -49,7 +49,7 @@ spring:
         - id: admin-marketing-service
           uri: lb://marketing-service
           predicates:
-            - Path=/api/admin/coupons/**,/api/admin/promotions/**
+            - Path=/api/admin/coupons/**,/api/admin/promotions/**,/api/admin/banners/**
         - id: admin-inventory-service
           uri: lb://inventory-service
           predicates:
@@ -90,8 +90,22 @@ spring:
         - id: marketing-service
           uri: lb://marketing-service
           predicates:
-            - Path=/api/marketing/coupon/**,/api/marketing/points,/api/marketing/promotion/**
+            - Path=/api/marketing/coupon/**,/api/marketing/points,/api/marketing/promotion/**,/api/marketing/banner,/api/marketing/banner/**
 
 logging:
   level:
     com.ecommerce: debug
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus

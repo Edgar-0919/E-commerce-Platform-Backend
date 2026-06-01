@@ -59,13 +59,16 @@ public enum ResultCodeEnum {
 
     // 购物车相关 60000-69999
     CART_ITEM_NOT_EXIST(60001, "购物车项不存在"),
+    CART_SKU_INFO_FAILED(60002, "获取商品信息失败，请稍后重试"),
 
     // 营销相关 80000-89999
     COUPON_EXPIRED(80001, "优惠券已过期"),
     COUPON_NOT_AVAILABLE(80002, "优惠券不可用"),
     COUPON_STOCK_INSUFFICIENT(80003, "优惠券已领完"),
     SECKILL_NOT_START(80004, "秒杀未开始"),
-    SECKILL_SOLD_OUT(80005, "秒杀已售罄");
+    SECKILL_SOLD_OUT(80005, "秒杀已售罄"),
+    POINTS_INSUFFICIENT(80006, "积分不足"),
+    PROMOTION_EXPIRED(80007, "促销活动已过期");
 
     private final int code;
     private final String message;

@@ -19,8 +19,26 @@
             <artifactId>common-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.ecommerce</groupId>
+            <artifactId>common-security</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Micrometer Tracing + Zipkin — 替代 Spring Cloud Sleuth（Spring Boot 3.x 已移除 Sleuth） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
         </dependency>
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

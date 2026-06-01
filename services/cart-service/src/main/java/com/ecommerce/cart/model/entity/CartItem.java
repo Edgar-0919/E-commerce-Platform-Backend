@@ -19,6 +19,7 @@ public class CartItem {
     private String productName;
     private String specDesc;
     private BigDecimal price;
+    private String mainImage;
     private Integer quantity;
     private Integer selected;
     private LocalDateTime createTime;

@@ -5,6 +5,8 @@ import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.marketing.mapper.*;
 import com.ecommerce.marketing.model.entity.*;
+import com.ecommerce.marketing.model.vo.BannerVO;
+import com.ecommerce.marketing.model.vo.UserCouponVO;
 import com.ecommerce.marketing.service.MarketingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -23,6 +26,7 @@ public class MarketingServiceImpl implements MarketingService {
     private final CouponTemplateMapper couponTemplateMapper;
     private final UserCouponMapper userCouponMapper;
     private final PromotionMapper promotionMapper;
+    private final BannerMapper bannerMapper;
     private final PointsMapper pointsMapper;
     private final PointsLogMapper pointsLogMapper;
     private final RedisTemplate<String, Object> redisTemplate;
@@ -72,10 +76,49 @@ public class MarketingServiceImpl implements MarketingService {
     }
 
     @Override
-    public List<UserCoupon> getUserCoupons(Long userId, Integer status) {
-        return userCouponMapper.selectList(new LambdaQueryWrapper<UserCoupon>()
-                .eq(UserCoupon::getUserId, userId)
-                .eq(status != null, UserCoupon::getStatus, status));
+    public List<UserCouponVO> getUserCoupons(Long userId, Integer status) {
+        // 查询用户持有的所有优惠券
+        List<UserCoupon> userCoupons = userCouponMapper.selectList(new LambdaQueryWrapper<UserCoupon>()
+                .eq(UserCoupon::getUserId, userId));
+
+        // 关联 CouponTemplate 转换为前端需要的 VO
+        // 状态映射：后端 0/1/2 → 前端 1/2/3（可使用/已使用/已过期）
+        return userCoupons.stream()
+                .map(uc -> {
+                    // 查询关联的优惠券模板以获取名称、面额、门槛、有效期等
+                    CouponTemplate template = couponTemplateMapper.selectById(uc.getTemplateId());
+                    UserCouponVO vo = new UserCouponVO();
+                    vo.setId(uc.getId());
+                    vo.setTemplateId(uc.getTemplateId());
+                    vo.setUserId(uc.getUserId());
+                    vo.setUsedTime(uc.getUsedTime());
+                    vo.setOrderId(uc.getOrderId());
+                    vo.setCreateTime(uc.getCreateTime());
+
+                    if (template != null) {
+                        vo.setName(template.getName());
+                        vo.setDiscountType(template.getType());
+                        vo.setDiscountValue(template.getAmount());
+                        vo.setMinAmount(template.getThreshold());
+                        vo.setExpireTime(template.getEndTime());
+                    }
+
+                    // 状态映射：后端状态（0=未使用, 1=已使用, 2=已过期）→ 前端状态（1=可使用, 2=已使用, 3=已过期）
+                    // 未使用但模板已过期的优惠券自动标记为已过期
+                    if (uc.getStatus() == 1) {
+                        vo.setStatus(2); // 已使用 → 前端 2
+                    } else if (uc.getStatus() == 2) {
+                        vo.setStatus(3); // 已过期 → 前端 3
+                    } else if (template != null && template.getEndTime().isBefore(LocalDateTime.now())) {
+                        vo.setStatus(3); // 模板已过期但券未标记 → 前端 3
+                    } else {
+                        vo.setStatus(1); // 未使用且在有效期内 → 前端 1
+                    }
+                    return vo;
+                })
+                // 如果前端传了 status 筛选，在后端按映射后的前端状态码过滤
+                .filter(vo -> status == null || vo.getStatus().equals(status))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -142,7 +185,7 @@ public class MarketingServiceImpl implements MarketingService {
     public void deductPoints(Long userId, Integer points, String remark) {
         UserPoints up = getPoints(userId);
         if (up.getTotalPoints() < points) {
-            throw new BusinessException(ResultCodeEnum.COUPON_NOT_AVAILABLE.getCode(), "积分不足");
+            throw new BusinessException(ResultCodeEnum.POINTS_INSUFFICIENT);
         }
         up.setTotalPoints(up.getTotalPoints() - points);
         pointsMapper.updateById(up);
@@ -167,5 +210,30 @@ public class MarketingServiceImpl implements MarketingService {
                 .eq(Promotion::getStatus, 1)
                 .le(Promotion::getStartTime, LocalDateTime.now())
                 .ge(Promotion::getEndTime, LocalDateTime.now()));
+    }
+
+    // ==================== Banner ====================
+
+    @Override
+    public List<BannerVO> getBanners(String position) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Banner> banners = bannerMapper.selectList(new LambdaQueryWrapper<Banner>()
+                .eq(Banner::getPosition, position)
+                .eq(Banner::getStatus, 1)
+                .and(w -> w.isNull(Banner::getStartTime).or().le(Banner::getStartTime, now))
+                .and(w -> w.isNull(Banner::getEndTime).or().ge(Banner::getEndTime, now))
+                .orderByAsc(Banner::getSort));
+        
+        return banners.stream()
+                .map(banner -> {
+                    BannerVO vo = new BannerVO();
+                    vo.setId(banner.getId());
+                    vo.setImage(banner.getImage());
+                    vo.setTitle(banner.getTitle());
+                    vo.setDescription(banner.getDescription());
+                    vo.setLinkUrl(banner.getLinkUrl());
+                    return vo;
+                })
+                .collect(Collectors.toList());
     }
 }

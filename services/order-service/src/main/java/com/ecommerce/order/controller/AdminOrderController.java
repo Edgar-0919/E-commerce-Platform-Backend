@@ -7,7 +7,7 @@ import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
-import com.ecommerce.inventory.model.dto.StockOperationDTO;
+import com.ecommerce.order.model.dto.StockOperationDTO;
 import com.ecommerce.order.feign.InventoryFeignClient;
 import com.ecommerce.order.mapper.OrderItemMapper;
 import com.ecommerce.order.mapper.OrderLogMapper;
@@ -71,7 +71,7 @@ public class AdminOrderController {
 
     @GetMapping("/{id}")
     @Operation(summary = "管理端订单详情")
-    public Result<OrderVO> getById(@PathVariable Long id) {
+    public Result<OrderVO> getById(@PathVariable("id") Long id) {
         Order order = orderMapper.selectById(id);
         if (order == null) {
             throw new BusinessException(ResultCodeEnum.ORDER_NOT_EXIST);
@@ -82,7 +82,7 @@ public class AdminOrderController {
     @PutMapping("/{id}/ship")
     @Operation(summary = "管理端发货")
     @Transactional
-    public Result<Void> ship(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public Result<Void> ship(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
         String trackingNo = body.get("trackingNo");
         String logisticsCompany = body.get("logisticsCompany");
 
@@ -109,7 +109,7 @@ public class AdminOrderController {
     @PutMapping("/{id}/cancel")
     @Operation(summary = "管理端取消订单")
     @Transactional
-    public Result<Void> cancel(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public Result<Void> cancel(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
         String reason = body.get("reason");
 
         Order order = orderMapper.selectById(id);
