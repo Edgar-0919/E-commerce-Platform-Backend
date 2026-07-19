@@ -10,6 +10,7 @@ public class TokenPayload {
     private String username;
     private String nickname;
     private List<String> roles;
+    private Long merchantId;
     private Long iat;
     private Long exp;
 }

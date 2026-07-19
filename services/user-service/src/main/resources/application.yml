@@ -5,17 +5,7 @@ spring:
   application:
     name: user-service
   config:
-    import: nacos:${spring.application.name}.yaml
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/db_user?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: root123
-    type: com.alibaba.druid.pool.DruidDataSource
-    druid:
-      initial-size: 5
-      min-idle: 5
-      max-active: 20
+    import: nacos:user-service.yaml
   cloud:
     nacos:
       discovery:
@@ -27,36 +17,3 @@ spring:
           - data-id: common-config.yaml
             group: DEFAULT_GROUP
             refresh: true
-    sentinel:
-      transport:
-        dashboard: localhost:8720
-        port: 8719
-      eager: true
-
-mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
-  global-config:
-    db-config:
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
-
-knife4j:
-  enable: true
-
-logging:
-  level:
-    com.ecommerce: debug
-
-management:
-  tracing:
-    sampling:
-      probability: 1.0
-  zipkin:
-    tracing:
-      endpoint: http://localhost:9411/api/v2/spans
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus

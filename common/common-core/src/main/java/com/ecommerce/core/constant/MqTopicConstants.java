@@ -21,7 +21,6 @@ public interface MqTopicConstants {
     String PRODUCT_STATUS_CHANGE = "product-status-change"; // search-service 消费（同步ES）
     String STOCK_DEDUCT = "stock-deduct";
     String COUPON_USED = "coupon-used";
-    String POINTS_CHANGE = "points-change";
 
     // ---- 消费组 ----
     String CONSUMER_GROUP_INVENTORY = "inventory-consumer-group";

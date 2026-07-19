@@ -1,7 +1,6 @@
 package com.ecommerce.order.controller;
 
-import com.alibaba.csp.sentinel.annotation.SentinelResource;
-import com.alibaba.csp.sentinel.slots.block.BlockException;
+
 import com.ecommerce.core.constant.OrderStatusEnum;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
@@ -35,36 +34,21 @@ public class OrderController {
     private final OrderService orderService;
 
     /**
-     * 创建订单 — 电商核心链路，需要限流和降级保护
-     * blockHandler：触发 Sentinel 流控/熔断规则时调用
-     * fallback：业务异常（如库存不足）时调用
+     * 创建订单 — 电商核心链路
      */
     @PostMapping
     @Operation(summary = "创建订单")
-    @SentinelResource(value = "createOrder", blockHandler = "createOrderBlockHandler", fallback = "createOrderFallback")
     public Result<OrderVO> create(@Valid @RequestBody OrderCreateDTO dto) {
         OrderVO vo = orderService.createOrder(UserContext.currentUserId(), dto);
         return Result.success(vo);
     }
 
-    /** 创建订单 — Sentinel 限流/降级处理 */
-    public Result<OrderVO> createOrderBlockHandler(OrderCreateDTO dto, BlockException ex) {
-        log.warn("[订单] 创建订单被Sentinel限流 — {}", ex.getMessage());
-        return Result.fail(429, "下单人数过多，请稍后再试");
-    }
-
-    /** 创建订单 — 业务异常降级处理 */
-    public Result<OrderVO> createOrderFallback(OrderCreateDTO dto, Throwable ex) {
-        log.error("[订单] 创建订单服务降级 —", ex);
-        return Result.fail(503, "下单服务暂时不可用，请稍后再试");
-    }
-
     @GetMapping("/page")
     @Operation(summary = "订单分页")
     public Result<PageResult<OrderVO>> page(
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "20") Integer size,
-            @RequestParam(required = false) String status) {
+            @RequestParam(value = "page", defaultValue = "1") Integer page,
+            @RequestParam(value = "size", defaultValue = "20") Integer size,
+            @RequestParam(value = "status", required = false) String status) {
         Integer statusCode = parseStatus(status);
         return Result.success(orderService.page(UserContext.currentUserId(), page, size, statusCode));
     }
@@ -77,7 +61,7 @@ public class OrderController {
 
     @GetMapping("/status/{orderNo}")
     @Operation(summary = "查询订单状态")
-    public Result<OrderVO> getByOrderNo(@PathVariable String orderNo) {
+    public Result<OrderVO> getByOrderNo(@PathVariable("orderNo") String orderNo) {
         return Result.success(orderService.getByOrderNo(orderNo));
     }
 
@@ -85,6 +69,13 @@ public class OrderController {
     @Operation(summary = "取消订单")
     public Result<Void> cancel(@PathVariable("id") Long id) {
         orderService.cancel(UserContext.currentUserId(), id);
+        return Result.success();
+    }
+
+    @PutMapping("/{id}/receive")
+    @Operation(summary = "确认收货")
+    public Result<Void> receive(@PathVariable("id") Long id) {
+        orderService.confirmReceive(UserContext.currentUserId(), id);
         return Result.success();
     }
 
@@ -99,11 +90,9 @@ public class OrderController {
         if (status == null || status.isEmpty()) {
             return null;
         }
-        // 尝试作为数字解析
         try {
             return Integer.parseInt(status);
         } catch (NumberFormatException e) {
-            // 作为字符串映射
             return switch (status.toUpperCase()) {
                 case "PENDING" -> OrderStatusEnum.PENDING_PAY.getCode();      // 待支付
                 case "PAID" -> OrderStatusEnum.PENDING_DELIVER.getCode();    // 待发货
@@ -112,6 +101,7 @@ public class OrderController {
                 case "CANCELLED" -> OrderStatusEnum.CANCELLED.getCode();    // 已取消
                 case "REFUNDING" -> OrderStatusEnum.REFUNDING.getCode();    // 退款中
                 case "REFUNDED" -> OrderStatusEnum.REFUNDED.getCode();      // 已退款
+                case "AFTERSALE" -> -1;                                      // 售后（已收货+退款中+已退款）
                 default -> null;
             };
         }

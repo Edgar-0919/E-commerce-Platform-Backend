@@ -14,7 +14,6 @@ public class ProductSaveDTO {
     @NotNull(message = "分类不能为空")
     private Long categoryId;
 
-    private Long brandId;
     private String mainImage;
     private List<String> images;
     private String description;

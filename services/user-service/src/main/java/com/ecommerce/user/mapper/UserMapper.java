@@ -13,6 +13,6 @@ public interface UserMapper extends BaseMapper<User> {
     @Delete("DELETE FROM t_user_role WHERE user_id = #{userId}")
     void deleteUserRoles(@Param("userId") Long userId);
 
-    @Insert("INSERT INTO t_user_role (id, user_id, role_id) VALUES (REPLACE(UUID(), '-', ''), #{userId}, #{roleId})")
-    void insertUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
+    @Insert("INSERT INTO t_user_role (id, user_id, role_id) VALUES (#{id}, #{userId}, #{roleId})")
+    void insertUserRole(@Param("id") Long id, @Param("userId") Long userId, @Param("roleId") Long roleId);
 }

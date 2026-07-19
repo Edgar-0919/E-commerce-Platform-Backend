@@ -20,6 +20,7 @@ public class CouponTemplate {
     private Integer totalCount;
     private Integer issuedCount;
     private Integer perUserLimit;
+    private Long merchantId;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Integer status;

@@ -15,6 +15,7 @@ public class Sku {
     private Long id;
     private Long productId;
     private String skuCode;
+    private Long merchantId;
     private String specValues;
     private BigDecimal price;
     private BigDecimal marketPrice;

@@ -31,13 +31,13 @@ public class AddressController {
 
     @GetMapping("/{id}")
     @Operation(summary = "地址详情")
-    public Result<UserAddress> getById(@PathVariable Long id) {
+    public Result<UserAddress> getById(@PathVariable("id") Long id) {
         return Result.success(addressService.getById(id));
     }
 
     @PostMapping
     @Operation(summary = "新增地址")
-    public Result<Void> save(@Valid @RequestBody AddressDTO dto) {
+    public Result<UserAddress> save(@Valid @RequestBody AddressDTO dto) {
         UserAddress address = new UserAddress();
         BeanUtils.copyProperties(dto, address);
         if (dto.getIsDefault() != null) {
@@ -47,12 +47,12 @@ public class AddressController {
         }
         address.setUserId(UserContext.currentUserId());
         addressService.save(address);
-        return Result.success();
+        return Result.success(address);
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "修改地址")
-    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody AddressDTO dto) {
+    public Result<Void> update(@PathVariable("id") Long id, @Valid @RequestBody AddressDTO dto) {
         UserAddress address = new UserAddress();
         BeanUtils.copyProperties(dto, address);
         if (dto.getIsDefault() != null) {
@@ -65,7 +65,7 @@ public class AddressController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除地址")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable("id") Long id) {
         addressService.delete(id, UserContext.currentUserId());
         return Result.success();
     }

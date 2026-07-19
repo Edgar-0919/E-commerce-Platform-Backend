@@ -26,8 +26,6 @@ public interface RedisKeyConstants {
     String CART_PREFIX = "cart:";
     // ---- 营销域 ----
     String COUPON_STOCK_PREFIX = "coupon:stock:";
-    String SECKILL_STOCK_PREFIX = "seckill:stock:";
-    String SECKILL_ORDER_PREFIX = "seckill:order:";
 
     static String userTokenKey(Long userId) {
         return USER_TOKEN_PREFIX + userId;

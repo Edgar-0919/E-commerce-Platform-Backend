@@ -2,7 +2,7 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 *.class
 *.jar
-*.log
+logs/
 .idea/
 *.iml
 *.ipr
@@ -14,3 +14,5 @@ target/
 .factorypath
 bin/
 out/
+.gitignore
+nacos-config

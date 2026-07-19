@@ -39,7 +39,7 @@ public class AdminCategoryController {
 
     @PutMapping("/{id}")
     @Operation(summary = "修改分类")
-    public Result<Void> update(@PathVariable Long id, @RequestBody Category category) {
+    public Result<Void> update(@PathVariable("id") Long id, @RequestBody Category category) {
         Category existing = categoryMapper.selectById(id);
         if (existing != null) {
             BeanUtils.copyProperties(category, existing, "id", "createTime");
@@ -51,7 +51,7 @@ public class AdminCategoryController {
 
     @PutMapping("/{id}/sort")
     @Operation(summary = "调整排序")
-    public Result<Void> updateSort(@PathVariable Long id, @RequestParam Integer sort) {
+    public Result<Void> updateSort(@PathVariable("id") Long id, @RequestParam("sort") Integer sort) {
         Category category = categoryMapper.selectById(id);
         if (category != null) {
             category.setSort(sort);
@@ -63,7 +63,7 @@ public class AdminCategoryController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除分类")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable("id") Long id) {
         categoryMapper.deleteById(id);
         return Result.success();
     }

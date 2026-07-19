@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.PageResult;
+import com.ecommerce.core.model.UserContext;
 import com.ecommerce.core.util.JsonUtils;
 import com.ecommerce.product.mapper.*;
 import com.ecommerce.product.model.dto.ProductQueryDTO;
@@ -14,7 +15,6 @@ import com.ecommerce.product.model.entity.*;
 import com.ecommerce.product.model.vo.CategoryVO;
 import com.ecommerce.product.model.vo.ProductVO;
 import com.ecommerce.product.model.vo.SkuVO;
-import com.ecommerce.product.mq.ProductMqProducer;
 import com.ecommerce.product.service.ProductService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -25,22 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * 商品服务实现类
- * 核心功能：
- * 1. 商品CRUD操作
- * 2. 商品分类树结构查询
- * 3. SKU库存管理
- * 4. 商品搜索查询
- * 数据结构：
- * - Product: 商品主表
- * - Sku: 库存单元
- * - Category: 商品分类
- * - Brand: 品牌信息
- * - SpecGroup/SpecParam: 规格参数
+ * 核心功能：商品CRUD、分类树、SKU管理、MySQL LIKE 搜索
  */
 @Slf4j
 @Service
@@ -49,17 +40,15 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductMapper productMapper;
     private final CategoryMapper categoryMapper;
-    private final BrandMapper brandMapper;
     private final SkuMapper skuMapper;
     private final SpecGroupMapper specGroupMapper;
     private final SpecParamMapper specParamMapper;
-    private final ProductMqProducer productMqProducer;
+    private final com.ecommerce.product.inventory.mapper.StockMapper stockMapper;
 
     @Override
     public PageResult<ProductVO> page(ProductQueryDTO query) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(query.getCategoryId() != null, Product::getCategoryId, query.getCategoryId())
-                .eq(query.getBrandId() != null, Product::getBrandId, query.getBrandId())
                 .eq(query.getStatus() != null, Product::getStatus, query.getStatus())
                 .like(StringUtils.hasText(query.getKeyword()), Product::getName, query.getKeyword())
                 .orderByDesc(Product::getCreateTime);
@@ -67,11 +56,92 @@ public class ProductServiceImpl implements ProductService {
         Page<Product> page = productMapper.selectPage(
                 new Page<>(query.getPage(), query.getSize()), wrapper);
 
-        List<ProductVO> records = page.getRecords().stream()
-                .map(this::toVO)
+        List<Product> products = page.getRecords();
+
+        // 一次 SQL 拉取当前页所有商品的 SKU，避免 N+1
+        Map<Long, List<Sku>> skuMap;
+        if (products.isEmpty()) {
+            skuMap = Map.of();
+        } else {
+            List<Long> productIds = products.stream().map(Product::getId).collect(Collectors.toList());
+            List<Sku> allSkus = skuMapper.selectList(new LambdaQueryWrapper<Sku>()
+                    .in(Sku::getProductId, productIds));
+            skuMap = allSkus.stream().collect(Collectors.groupingBy(Sku::getProductId));
+        }
+
+        List<ProductVO> records = products.stream()
+                .map(p -> toVO(p, skuMap.get(p.getId())))
                 .collect(Collectors.toList());
 
         return PageResult.of(page.getCurrent(), page.getSize(), page.getTotal(), records);
+    }
+
+    @Override
+    public PageResult<ProductVO> search(ProductQueryDTO query) {
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
+                .eq(Product::getStatus, 1)
+                .eq(Product::getDeleted, 0);
+        if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
+            wrapper.like(Product::getName, query.getKeyword());
+        }
+        if (query.getCategoryId() != null) {
+            wrapper.eq(Product::getCategoryId, query.getCategoryId());
+        }
+
+        if ("sales".equals(query.getSortBy())) {
+            wrapper.orderByDesc(Product::getSalesCount);
+        } else {
+            wrapper.orderByDesc(Product::getCreateTime);
+        }
+
+        List<Product> products = productMapper.selectList(wrapper);
+        Map<Long, List<Sku>> skuMap;
+        if (products.isEmpty()) {
+            skuMap = Map.of();
+        } else {
+            List<Long> productIds = products.stream().map(Product::getId).collect(Collectors.toList());
+            List<Sku> allSkus = skuMapper.selectList(new LambdaQueryWrapper<Sku>()
+                    .in(Sku::getProductId, productIds));
+            skuMap = allSkus.stream().collect(Collectors.groupingBy(Sku::getProductId));
+        }
+
+        List<ProductVO> voList = products.stream()
+                .map(p -> toVO(p, skuMap.get(p.getId())))
+                .collect(Collectors.toList());
+
+        if (query.getMinPrice() != null) {
+            voList = voList.stream()
+                    .filter(v -> v.getPrice() != null && v.getPrice().compareTo(query.getMinPrice()) >= 0)
+                    .collect(Collectors.toList());
+        }
+        if (query.getMaxPrice() != null) {
+            voList = voList.stream()
+                    .filter(v -> v.getPrice() != null && v.getPrice().compareTo(query.getMaxPrice()) <= 0)
+                    .collect(Collectors.toList());
+        }
+
+        if ("price_asc".equals(query.getSortBy())) {
+            voList.sort((a, b) -> {
+                BigDecimal pa = a.getPrice() != null ? a.getPrice() : BigDecimal.ZERO;
+                BigDecimal pb = b.getPrice() != null ? b.getPrice() : BigDecimal.ZERO;
+                return pa.compareTo(pb);
+            });
+        } else if ("price_desc".equals(query.getSortBy())) {
+            voList.sort((a, b) -> {
+                BigDecimal pa = a.getPrice() != null ? a.getPrice() : BigDecimal.ZERO;
+                BigDecimal pb = b.getPrice() != null ? b.getPrice() : BigDecimal.ZERO;
+                return pb.compareTo(pa);
+            });
+        }
+
+        int total = voList.size();
+        int page = query.getPage() != null ? query.getPage() : 1;
+        int size = query.getSize() != null ? query.getSize() : 20;
+        int fromIndex = (page - 1) * size;
+        int toIndex = Math.min(fromIndex + size, total);
+        List<ProductVO> pageList = fromIndex < total ? voList.subList(fromIndex, toIndex) : new ArrayList<>();
+
+        return PageResult.of(page, size, total, pageList);
     }
 
     @Override
@@ -80,32 +150,85 @@ public class ProductServiceImpl implements ProductService {
         if (product == null) {
             throw new BusinessException(ResultCodeEnum.PRODUCT_NOT_EXIST);
         }
-        return toVO(product);
+        List<Sku> skus = skuMapper.selectList(new LambdaQueryWrapper<Sku>()
+                .eq(Sku::getProductId, id));
+        return toVO(product, skus);
     }
 
     @Override
     @Transactional
     public void save(ProductSaveDTO dto) {
+        Long merchantId = UserContext.currentMerchantId();
+        if (merchantId == null) {
+            merchantId = 1L;
+        }
+
         Product product = new Product();
         BeanUtils.copyProperties(dto, product);
+        product.setMerchantId(merchantId);
         product.setImages(dto.getImages() != null ? JsonUtils.toJson(dto.getImages()) : null);
         product.setStatus(1);
         productMapper.insert(product);
+
+        List<Map<String, Object>> stockInitList = new ArrayList<>();
 
         if (dto.getSkus() != null) {
             for (SkuSaveDTO skuDTO : dto.getSkus()) {
                 Sku sku = new Sku();
                 BeanUtils.copyProperties(skuDTO, sku);
                 sku.setProductId(product.getId());
+                sku.setMerchantId(merchantId);
                 sku.setSpecValues(JsonUtils.toJson(skuDTO.getSpecValues()));
                 sku.setStatus(1);
                 sku.setStock(skuDTO.getStock() != null ? skuDTO.getStock() : 0);
                 skuMapper.insert(sku);
+
+                Map<String, Object> item = new HashMap<>();
+                item.put("skuId", sku.getId());
+                item.put("productId", product.getId());
+                item.put("merchantId", merchantId);
+                item.put("stock", sku.getStock());
+                stockInitList.add(item);
             }
         }
-        log.info("商品创建成功: id={}, name={}", product.getId(), product.getName());
-        // 发送 MQ 异步同步 ES 索引
-        sendProductChangeMq(product);
+
+        // 本地初始化库存（inventory 已合并到 product-service）
+        if (!stockInitList.isEmpty()) {
+            initStockLocal(stockInitList);
+        }
+
+        log.info("商品创建成功: id={}, name={}, skuCount={}", product.getId(), product.getName(), stockInitList.size());
+    }
+
+    /** 本地初始化库存记录（替代原 Feign 调用 inventory-service） */
+    private void initStockLocal(List<Map<String, Object>> skuList) {
+        LocalDateTime now = LocalDateTime.now();
+        int created = 0;
+        for (Map<String, Object> item : skuList) {
+            Long skuId = item.get("skuId") != null ? Long.valueOf(item.get("skuId").toString()) : null;
+            Long productId = item.get("productId") != null ? Long.valueOf(item.get("productId").toString()) : null;
+            Long merchantId = item.get("merchantId") != null ? Long.valueOf(item.get("merchantId").toString()) : 1L;
+            int qty = item.get("stock") != null ? Integer.parseInt(item.get("stock").toString()) : 0;
+            if (skuId == null) continue;
+
+            Long existing = stockMapper.selectCount(new LambdaQueryWrapper<com.ecommerce.product.inventory.model.entity.Stock>()
+                    .eq(com.ecommerce.product.inventory.model.entity.Stock::getSkuId, skuId));
+            if (existing != null && existing > 0) continue;
+
+            com.ecommerce.product.inventory.model.entity.Stock stock = new com.ecommerce.product.inventory.model.entity.Stock();
+            stock.setSkuId(skuId);
+            stock.setProductId(productId);
+            stock.setMerchantId(merchantId);
+            stock.setTotalStock(qty);
+            stock.setLockedStock(0);
+            stock.setAvailableStock(qty);
+            stock.setSafetyStock(10);
+            stock.setVersion(1);
+            stock.setUpdateTime(now);
+            stockMapper.insert(stock);
+            created++;
+        }
+        log.info("批量初始化库存完成，新增 {} 条记录", created);
     }
 
     @Override
@@ -119,8 +242,6 @@ public class ProductServiceImpl implements ProductService {
         product.setImages(dto.getImages() != null ? JsonUtils.toJson(dto.getImages()) : null);
         productMapper.updateById(product);
         log.info("商品更新成功: id={}", id);
-        // 发送 MQ 异步同步 ES 索引
-        sendProductChangeMq(product);
     }
 
     @Override
@@ -131,8 +252,6 @@ public class ProductServiceImpl implements ProductService {
         }
         product.setStatus(status);
         productMapper.updateById(product);
-        // 发送 MQ 异步同步 ES 索引
-        sendProductChangeMq(product);
     }
 
     @Override
@@ -175,7 +294,11 @@ public class ProductServiceImpl implements ProductService {
         return toSkuVO(sku);
     }
 
-    private ProductVO toVO(Product product) {
+    /**
+     * 将 Product 转为 ProductVO — 外部已预查好 SKU 列表时使用（page() 场景）。
+     * <p>price 取所有 SKU 中最低价格，stock 取所有 SKU 库存之和。</p>
+     */
+    private ProductVO toVO(Product product, List<Sku> skus) {
         ProductVO vo = new ProductVO();
         BeanUtils.copyProperties(product, vo);
 
@@ -189,18 +312,28 @@ public class ProductServiceImpl implements ProductService {
             if (category != null) vo.setCategoryName(category.getName());
         }
 
-        if (product.getBrandId() != null) {
-            Brand brand = brandMapper.selectById(product.getBrandId());
-            if (brand != null) vo.setBrandName(brand.getName());
-        }
-
-        List<Sku> skus = skuMapper.selectList(new LambdaQueryWrapper<Sku>()
-                .eq(Sku::getProductId, product.getId()));
-        if (skus != null && !skus.isEmpty()) {
-            vo.setSkus(skus.stream().map(this::toSkuVO).collect(Collectors.toList()));
+        List<SkuVO> skuVOs;
+        if (skus == null || skus.isEmpty()) {
+            skuVOs = new ArrayList<>();
+            vo.setPrice(BigDecimal.ZERO);
+            vo.setStock(0);
         } else {
-            vo.setSkus(new ArrayList<>());
+            BigDecimal minPrice = null;
+            int totalStock = 0;
+            skuVOs = new ArrayList<>(skus.size());
+            for (Sku sku : skus) {
+                if (sku.getPrice() != null) {
+                    minPrice = minPrice == null ? sku.getPrice() : minPrice.min(sku.getPrice());
+                }
+                if (sku.getStock() != null) {
+                    totalStock += sku.getStock();
+                }
+                skuVOs.add(toSkuVO(sku));
+            }
+            vo.setPrice(minPrice == null ? BigDecimal.ZERO : minPrice);
+            vo.setStock(totalStock);
         }
+        vo.setSkus(skuVOs);
 
         return vo;
     }
@@ -212,7 +345,6 @@ public class ProductServiceImpl implements ProductService {
             vo.setSpecValues(JsonUtils.fromJson(sku.getSpecValues(),
                     new TypeReference<Map<String, String>>() {}));
         }
-        // 关联查询 Product 表获取商品名称，供订单服务创建订单项时动态获取真实商品名
         Product product = productMapper.selectById(sku.getProductId());
         if (product != null) {
             vo.setProductName(product.getName());
@@ -220,59 +352,21 @@ public class ProductServiceImpl implements ProductService {
         return vo;
     }
 
-    // ==================== ES 索引同步 ====================
-
     @Override
     public void delete(Long id) {
         Product product = productMapper.selectById(id);
         if (product != null) {
             productMapper.deleteById(id);
             log.info("商品删除: id={}, name={}", id, product.getName());
-            // 发送 MQ 通知 ES 删除索引
-            productMqProducer.sendProductDelete(id);
         }
     }
 
     @Override
-    public List<ProductVO> getAllOnSale() {
-        List<Product> products = productMapper.selectList(
-                new LambdaQueryWrapper<Product>()
-                        .eq(Product::getStatus, 1)
-                        .orderByDesc(Product::getId));
-        return products.stream().map(this::toVO).collect(Collectors.toList());
-    }
-
-    /** 构建并发送商品变更 MQ 消息（异步同步 ES） */
-    private void sendProductChangeMq(Product product) {
-        try {
-            ProductVO vo = toVO(product);
-            // 取最低价 SKU 作为搜索价格
-            BigDecimal minPrice = null;
-            BigDecimal minMarketPrice = null;
-            int totalStock = 0;
-            if (vo.getSkus() != null && !vo.getSkus().isEmpty()) {
-                for (SkuVO sku : vo.getSkus()) {
-                    if (sku.getPrice() != null) {
-                        minPrice = minPrice == null ? sku.getPrice()
-                                : minPrice.min(sku.getPrice());
-                    }
-                    if (sku.getMarketPrice() != null) {
-                        minMarketPrice = minMarketPrice == null ? sku.getMarketPrice()
-                                : minMarketPrice.min(sku.getMarketPrice());
-                    }
-                    if (sku.getStock() != null) {
-                        totalStock += sku.getStock();
-                    }
-                }
-            }
-            productMqProducer.sendProductChange(
-                    product.getId(), product.getName(),
-                    product.getCategoryId(), vo.getCategoryName(),
-                    product.getBrandId(), vo.getBrandName(),
-                    product.getMainImage(), product.getDescription(),
-                    product.getStatus(), minPrice, minMarketPrice, totalStock);
-        } catch (Exception e) {
-            log.error("发送商品变更MQ失败: id={}, name={}", product.getId(), product.getName(), e);
+    public Map<Long, String> getProductNames(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
         }
+        List<Product> products = productMapper.selectBatchIds(ids);
+        return products.stream().collect(Collectors.toMap(Product::getId, Product::getName));
     }
 }

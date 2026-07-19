@@ -1,7 +1,6 @@
 package com.ecommerce.product.controller;
 
-import com.alibaba.csp.sentinel.annotation.SentinelResource;
-import com.alibaba.csp.sentinel.slots.block.BlockException;
+
 import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.PageResult;
@@ -19,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -44,8 +45,7 @@ public class ProductController {
      */
     @GetMapping("/{id}")
     @Operation(summary = "商品详情")
-    @SentinelResource(value = "getProductDetail", blockHandler = "getByIdBlockHandler", fallback = "getByIdFallback")
-    public Result<ProductVO> getById(@PathVariable Long id) {
+    public Result<ProductVO> getById(@PathVariable("id") Long id) {
         ProductVO vo = productService.getById(id);
         if (vo == null) {
             throw new BusinessException(ResultCodeEnum.PRODUCT_NOT_EXIST);
@@ -54,16 +54,6 @@ public class ProductController {
             throw new BusinessException(ResultCodeEnum.PRODUCT_NOT_EXIST);
         }
         return Result.success(vo);
-    }
-
-    public Result<ProductVO> getByIdBlockHandler(Long id, BlockException ex) {
-        log.warn("[商品] 商品详情被Sentinel限流 — id={}", id);
-        return Result.fail(429, "商品信息查询繁忙，请稍后再试");
-    }
-
-    public Result<ProductVO> getByIdFallback(Long id, Throwable ex) {
-        log.error("[商品] 商品详情服务降级 — id={}", id, ex);
-        return Result.fail(503, "商品信息暂时不可用");
     }
 
     @PostMapping
@@ -75,14 +65,14 @@ public class ProductController {
 
     @PutMapping("/{id}")
     @Operation(summary = "修改商品")
-    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody ProductSaveDTO dto) {
+    public Result<Void> update(@PathVariable("id") Long id, @Valid @RequestBody ProductSaveDTO dto) {
         productService.update(id, dto);
         return Result.success();
     }
 
     @PutMapping("/{id}/status")
     @Operation(summary = "商品上下架")
-    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+    public Result<Void> updateStatus(@PathVariable("id") Long id, @RequestParam("status") Integer status) {
         productService.updateStatus(id, status);
         return Result.success();
     }
@@ -95,7 +85,38 @@ public class ProductController {
 
     @GetMapping("/sku/{id}")
     @Operation(summary = "SKU详情")
-    public Result<SkuVO> getSku(@PathVariable Long id) {
+    public Result<SkuVO> getSku(@PathVariable("id") Long id) {
         return Result.success(productService.getSkuById(id));
+    }
+
+    @GetMapping("/names")
+    @Operation(summary = "批量查询商品名称（id → name）")
+    public Result<Map<Long, String>> getNames(@RequestParam("ids") List<Long> ids) {
+        return Result.success(productService.getProductNames(ids));
+    }
+
+    /**
+     * 商品搜索 — 基于 MySQL LIKE 替代 ES 全文搜索
+     */
+    @GetMapping("/search")
+    @Operation(summary = "商品搜索")
+    public Result<PageResult<ProductVO>> search(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "categoryId", required = false) Long categoryId,
+            @RequestParam(value = "minPrice", required = false) BigDecimal minPrice,
+            @RequestParam(value = "maxPrice", required = false) BigDecimal maxPrice,
+            @RequestParam(value = "sortBy", required = false) String sortBy,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "size", defaultValue = "20") int size) {
+        ProductQueryDTO query = new ProductQueryDTO();
+        query.setKeyword(keyword);
+        query.setCategoryId(categoryId);
+        query.setMinPrice(minPrice);
+        query.setMaxPrice(maxPrice);
+        query.setSortBy(sortBy);
+        query.setPage(page);
+        query.setSize(size);
+        query.setStatus(1);
+        return Result.success(productService.search(query));
     }
 }

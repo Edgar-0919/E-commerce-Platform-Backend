@@ -3,6 +3,7 @@ package com.ecommerce.order.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.order.model.dto.OrderCreateDTO;
+import com.ecommerce.order.model.entity.Order;
 import com.ecommerce.order.model.vo.OrderVO;
 
 public interface OrderService {
@@ -17,5 +18,9 @@ public interface OrderService {
 
     void cancel(Long userId, Long id);
 
+    void confirmReceive(Long userId, Long id);
+
     void updateStatus(Long id, Integer status, String operator);
+
+    Order getOrderEntity(Long id);
 }

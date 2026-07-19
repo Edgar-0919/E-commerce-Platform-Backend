@@ -25,11 +25,7 @@
         <!-- 微服务 -->
         <module>services/user-service</module>
         <module>services/product-service</module>
-        <module>services/inventory-service</module>
         <module>services/order-service</module>
-        <module>services/payment-service</module>
-        <module>services/cart-service</module>
-        <module>services/search-service</module>
         <module>services/marketing-service</module>
     </modules>
 
@@ -37,6 +33,7 @@
         <java.version>17</java.version>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.parameters>true</maven.compiler.parameters>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Framework versions — Spring Boot 3.2.4 is the highest officially supported by SCA 2023.0.1.0 -->
@@ -48,10 +45,6 @@
         <mysql-connector.version>8.3.0</mysql-connector.version>
         <!-- ⚠️ Spring Boot 3.x requires mybatis-plus-spring-boot3-starter, NOT mybatis-plus-boot-starter -->
         <mybatis-plus.version>3.5.9</mybatis-plus.version>
-        <druid.version>1.2.22</druid.version>
-
-        <!-- Cache & Lock -->
-        <redisson.version>3.30.0</redisson.version>
 
         <!-- Message Queue — Spring Cloud Stream + RabbitMQ binder -->
         <spring-cloud-stream.version>4.1.0</spring-cloud-stream.version>
@@ -60,15 +53,10 @@
         <jjwt.version>0.12.6</jjwt.version>
 
         <!-- Utilities -->
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <knife4j.version>4.5.0</knife4j.version>
-        <hutool.version>5.8.27</hutool.version>
+        <lombok.version>1.18.30</lombok.version>
 
         <!-- Plugin versions -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
-
-        <!-- Lombok — 必须指定版本，maven-compiler-plugin 的注解处理器会引用此版本 -->
-        <lombok.version>1.18.30</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -91,7 +79,7 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Spring Cloud Alibaba BOM — manages Nacos, Seata versions -->
+            <!-- Spring Cloud Alibaba BOM — manages Nacos versions -->
             <dependency>
                 <groupId>com.alibaba.cloud</groupId>
                 <artifactId>spring-cloud-alibaba-dependencies</artifactId>
@@ -120,20 +108,6 @@
                 <version>3.5.9</version> <!-- 确保版本和 MyBatis Plus 主包一致 -->
             </dependency>
 
-            <!-- Druid connection pool -->
-            <dependency>
-                <groupId>com.alibaba</groupId>
-                <artifactId>druid-spring-boot-3-starter</artifactId>
-                <version>${druid.version}</version>
-            </dependency>
-
-            <!-- Redisson distributed lock -->
-            <dependency>
-                <groupId>org.redisson</groupId>
-                <artifactId>redisson-spring-boot-starter</artifactId>
-                <version>${redisson.version}</version>
-            </dependency>
-
             <!-- Spring Cloud Stream + RabbitMQ Binder — 消息驱动微服务 -->
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
@@ -156,27 +130,6 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
-            </dependency>
-
-            <!-- MapStruct -->
-            <dependency>
-                <groupId>org.mapstruct</groupId>
-                <artifactId>mapstruct</artifactId>
-                <version>${mapstruct.version}</version>
-            </dependency>
-
-            <!-- Knife4j API doc -->
-            <dependency>
-                <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-                <version>${knife4j.version}</version>
-            </dependency>
-
-            <!-- Hutool all-in-one tool -->
-            <dependency>
-                <groupId>cn.hutool</groupId>
-                <artifactId>hutool-all</artifactId>
-                <version>${hutool.version}</version>
             </dependency>
 
             <!-- Internal common modules -->
@@ -219,15 +172,11 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- All modules inherit these core dependencies -->
+        <!-- All modules inherit Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mapstruct</groupId>
-            <artifactId>mapstruct</artifactId>
         </dependency>
     </dependencies>
 
@@ -261,29 +210,23 @@
                     <configuration>
                         <source>${java.version}</source>
                         <target>${java.version}</target>
-                        <compilerArgs>
-                            <arg>-parameters</arg>
-                        </compilerArgs>
+                        <parameters>true</parameters>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
                                 <version>${lombok.version}</version>
                             </path>
-                            <path>
-                                <groupId>org.mapstruct</groupId>
-                                <artifactId>mapstruct-processor</artifactId>
-                                <version>${mapstruct.version}</version>
-                            </path>
-                            <path>
-                                <groupId>org.projectlombok</groupId>
-                                <artifactId>lombok-mapstruct-binding</artifactId>
-                                <version>0.2.0</version>
-                            </path>
                         </annotationProcessorPaths>
                     </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 </project>

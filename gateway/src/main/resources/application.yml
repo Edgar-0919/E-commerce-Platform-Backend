@@ -5,7 +5,7 @@ spring:
   application:
     name: gateway
   config:
-    import: optional:nacos:${spring.application.name}.yaml
+    import: optional:nacos:gateway.yaml
   cloud:
     nacos:
       discovery:
@@ -17,95 +17,3 @@ spring:
           - data-id: common-config.yaml
             group: DEFAULT_GROUP
             refresh: true
-    sentinel:
-      transport:
-        dashboard: localhost:8720
-        port: 8718
-      eager: true
-      scg:
-        fallback:
-          mode: response
-          response-status: 429
-          response-body: '{"code":429,"message":"请求过于频繁，请稍后再试"}'
-    gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      routes:
-        # ===== B端管理后台路由 =====
-        - id: admin-user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/admin/users/**
-        - id: admin-product-service
-          uri: lb://product-service
-          predicates:
-            - Path=/api/admin/products/**,/api/admin/brands/**,/api/admin/categories/**
-        - id: admin-order-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/admin/orders/**
-        - id: admin-marketing-service
-          uri: lb://marketing-service
-          predicates:
-            - Path=/api/admin/coupons/**,/api/admin/promotions/**,/api/admin/banners/**
-        - id: admin-inventory-service
-          uri: lb://inventory-service
-          predicates:
-            - Path=/api/admin/inventory/**
-        - id: admin-dashboard-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/admin/dashboard/**
-        # ===== C端路由 =====
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/user/**
-        - id: product-service
-          uri: lb://product-service
-          predicates:
-            - Path=/api/product/**
-        - id: order-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/order/**
-        - id: payment-service
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/payment/**
-        - id: inventory-service
-          uri: lb://inventory-service
-          predicates:
-            - Path=/api/inventory/alert,/api/inventory/sync/**,/api/inventory/{skuId:[0-9]+}
-        - id: cart-service
-          uri: lb://cart-service
-          predicates:
-            - Path=/api/cart/**
-        - id: search-service
-          uri: lb://search-service
-          predicates:
-            - Path=/api/search/**
-        - id: marketing-service
-          uri: lb://marketing-service
-          predicates:
-            - Path=/api/marketing/coupon/**,/api/marketing/points,/api/marketing/promotion/**,/api/marketing/banner,/api/marketing/banner/**
-
-logging:
-  level:
-    com.ecommerce: debug
-  pattern:
-    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
-
-management:
-  tracing:
-    sampling:
-      probability: 1.0
-  zipkin:
-    tracing:
-      endpoint: http://localhost:9411/api/v2/spans
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus

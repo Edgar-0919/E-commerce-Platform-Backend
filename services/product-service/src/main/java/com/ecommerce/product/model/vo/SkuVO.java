@@ -10,6 +10,7 @@ public class SkuVO {
     private Long id;
     private Long productId;
     private String skuCode;
+    private Long merchantId;
     private Map<String, String> specValues;
     private BigDecimal price;
     private BigDecimal marketPrice;

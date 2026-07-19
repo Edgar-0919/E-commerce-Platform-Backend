@@ -5,9 +5,7 @@
 # - MySQL: 关系型数据库（商品、订单、用户等核心数据）
 # - Redis: 缓存服务（热点数据、库存锁定、购物车）
 # - Nacos: 服务注册与配置中心
-# - Elasticsearch: 全文搜索引擎（商品搜索）
 # - RabbitMQ: 消息队列（Spring Cloud Stream 绑定，异步解耦、最终一致性）
-# - Sentinel Dashboard: 流量监控与熔断降级控制台
 # ============================================
 
 version: '3.8'
@@ -19,6 +17,7 @@ services:
   # 特性: 
   #   - 使用 utf8mb4 字符集支持中文和 emoji
   #   - 自动执行 ../sql 目录下的初始化脚本
+  #   - 脚本按文件名排序执行：01-建表 -> 99-测试数据
   mysql:
     image: mysql:8.0
     container_name: ecommerce-mysql
@@ -69,28 +68,6 @@ services:
       - nacos_data:/home/nacos/data   # 配置和数据持久化
     restart: unless-stopped
 
-  # ==================== Elasticsearch 搜索引擎 ====================
-  # 端口: 9200（REST API）, 9300（内部通信）
-  # 用途:
-  #   - 商品全文搜索
-  #   - 搜索关键词高亮
-  #   - 聚合分析（分类统计、价格区间等）
-  elasticsearch:
-    build:
-      context: .
-      dockerfile: Dockerfile.es
-    container_name: ecommerce-es
-    environment:
-      discovery.type: single-node      # 单节点模式（生产环境使用集群）
-      ES_JAVA_OPTS: -Xms512m -Xmx512m # JVM堆内存设置
-      xpack.security.enabled: false   # 禁用安全验证（开发环境）
-    ports:
-      - "9200:9200"                   # REST API端口
-      - "9300:9300"                   # 节点间通信端口
-    volumes:
-      - es_data:/usr/share/elasticsearch/data  # 索引数据持久化
-    restart: unless-stopped
-
   # ==================== RabbitMQ 消息队列 ====================
   # 端口: 5672 (AMQP), 15672 (Management UI)
   # 用途:
@@ -100,6 +77,10 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: ecommerce-rabbitmq
+    # 延迟消息实现方式：原生 TTL + DLX（死信交换机），不依赖任何 RabbitMQ 插件。
+    # 镜像原生支持 management 插件；delayed_message_exchange 插件未内置在 alpine 版中且启用流程不稳定，
+    # 故改为：发送端给消息设 expiration(=TTL) → 发到 delay exchange → 进入 delay 队列（无消费者）
+    #        → TTL 到期后自动通过 DLX 路由到真正的业务 exchange：order-timeout / payment-success 等
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -110,74 +91,10 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
 
-  # ==================== Sentinel Dashboard 控制台 ====================
-  # 端口: 8730
-  # 用途:
-  #   - 实时流量监控（QPS、响应时间、线程数）
-  #   - 熔断降级规则可视化配置
-  #   - 热点参数限流管理
-  # 访问: http://localhost:8730 (sentinel/sentinel)
-  sentinel-dashboard:
-    image: bladex/sentinel-dashboard:1.8.6
-    container_name: ecommerce-sentinel
-    environment:
-      SERVER_PORT: 8080
-      SENTINEL_DASHBOARD_USERNAME: sentinel
-      SENTINEL_DASHBOARD_PASSWORD: sentinel
-    ports:
-      - "8730:8080"                   # Dashboard 访问端口
-    restart: unless-stopped
-
-  # ==================== Seata 分布式事务协调器 ====================
-  # 端口: 7091 (控制台), 8091 (RPC通信)
-  # 用途:
-  #   - 协调分布式事务的提交与回滚（AT 模式）
-  #   - 适用场景：订单创建（同时操作订单、库存、优惠券）
-  #   - 控制台: http://localhost:7091
-  seata-server:
-    image: seataio/seata-server:2.0.0
-    container_name: ecommerce-seata
-    environment:
-      # Seata Server RPC 通信端口
-      SEATA_PORT: 8091
-      # 存储模式：开发环境使用 file 模式，无需额外数据库
-      STORE_MODE: file
-      # 注册到 Nacos，以便微服务客户端通过 Nacos 发现 Seata Server
-      SEATA_REGISTRY_TYPE: nacos
-      SEATA_REGISTRY_NACOS_SERVER_ADDR: nacos:8848
-      SEATA_REGISTRY_NACOS_GROUP: SEATA_GROUP
-      SEATA_REGISTRY_NACOS_CLUSTER: default
-      SEATA_REGISTRY_NACOS_APPLICATION: seata-server
-      # Seata Server 自身配置也从 Nacos 读取
-      SEATA_CONFIG_TYPE: nacos
-      SEATA_CONFIG_NACOS_SERVER_ADDR: nacos:8848
-      SEATA_CONFIG_NACOS_GROUP: SEATA_GROUP
-      # Seata Server 对外暴露的 IP，微服务通过此 IP 连接
-      SEATA_IP: host.docker.internal
-    ports:
-      - "7091:7091"
-      - "8091:8091"
-    restart: unless-stopped
-
-  # ==================== Zipkin 分布式链路追踪 ====================
-  # 端口: 9411
-  # 用途:
-  #   - 收集各微服务的调用链路数据（trace/span）
-  #   - 可视化服务依赖拓扑和性能瓶颈
-  #   - 与 Micrometer Tracing + Brave 集成
-  #   - 控制台: http://localhost:9411
-  zipkin:
-    image: openzipkin/zipkin:3
-    container_name: ecommerce-zipkin
-    ports:
-      - "9411:9411"
-    restart: unless-stopped
-
 # ==================== 数据持久化卷 ====================
 # 所有服务的数据都通过Docker Volume持久化，避免容器删除后数据丢失
 volumes:
   mysql_data:           # MySQL数据库数据
   redis_data:           # Redis缓存数据
   nacos_data:           # Nacos配置和注册数据
-  es_data:              # Elasticsearch索引数据
   rabbitmq_data:        # RabbitMQ消息队列数据

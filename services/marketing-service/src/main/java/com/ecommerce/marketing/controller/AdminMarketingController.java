@@ -6,42 +6,39 @@ import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
 import com.ecommerce.marketing.mapper.BannerMapper;
 import com.ecommerce.marketing.mapper.CouponTemplateMapper;
-import com.ecommerce.marketing.mapper.PromotionMapper;
 import com.ecommerce.marketing.model.entity.Banner;
 import com.ecommerce.marketing.model.entity.CouponTemplate;
-import com.ecommerce.marketing.model.entity.Promotion;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
-@Tag(name = "管理端-营销管理", description = "优惠券模板、促销活动管理")
+@Tag(name = "管理端-营销管理", description = "优惠券模板、轮播图管理")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminMarketingController {
 
     private final CouponTemplateMapper couponTemplateMapper;
-    private final PromotionMapper promotionMapper;
     private final BannerMapper bannerMapper;
-    private final ObjectMapper objectMapper;
 
     // ======================== 优惠券模板 ========================
 
     @GetMapping("/coupons/templates")
     @Operation(summary = "优惠券模板列表")
     public Result<PageResult<CouponTemplate>> listTemplates(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize,
-            @RequestParam(required = false) String name,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(name = "pageNum", defaultValue = "1") Integer pageNum,
+            @RequestParam(name = "pageSize", defaultValue = "20") Integer pageSize,
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "status", required = false) Integer status) {
         LambdaQueryWrapper<CouponTemplate> wrapper = new LambdaQueryWrapper<CouponTemplate>()
                 .like(StringUtils.hasText(name), CouponTemplate::getName, name)
                 .eq(status != null, CouponTemplate::getStatus, status)
@@ -60,8 +57,9 @@ public class AdminMarketingController {
         template.setAmount(new BigDecimal(body.get("amount").toString()));
         template.setTotalCount((Integer) body.get("totalCount"));
         template.setPerUserLimit((Integer) body.get("perUserLimit"));
-        template.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        template.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        template.setMerchantId(1L);
+        template.setStartTime(LocalDateTime.parse((String) body.get("startTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        template.setEndTime(LocalDateTime.parse((String) body.get("endTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         template.setStatus(1);
         template.setIssuedCount(0);
         template.setCreateTime(LocalDateTime.now());
@@ -72,7 +70,7 @@ public class AdminMarketingController {
 
     @PutMapping("/coupons/templates/{id}")
     @Operation(summary = "更新优惠券模板")
-    public Result<Void> updateTemplate(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public Result<Void> updateTemplate(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         CouponTemplate template = couponTemplateMapper.selectById(id);
         if (template == null) {
             return Result.fail(404, "优惠券模板不存在");
@@ -83,8 +81,8 @@ public class AdminMarketingController {
         if (body.containsKey("amount")) template.setAmount(new BigDecimal(body.get("amount").toString()));
         if (body.containsKey("totalCount")) template.setTotalCount((Integer) body.get("totalCount"));
         if (body.containsKey("perUserLimit")) template.setPerUserLimit((Integer) body.get("perUserLimit"));
-        if (body.containsKey("startTime")) template.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        if (body.containsKey("endTime")) template.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        if (body.containsKey("startTime")) template.setStartTime(LocalDateTime.parse((String) body.get("startTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (body.containsKey("endTime")) template.setEndTime(LocalDateTime.parse((String) body.get("endTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         template.setUpdateTime(LocalDateTime.now());
         couponTemplateMapper.updateById(template);
         return Result.success();
@@ -92,7 +90,7 @@ public class AdminMarketingController {
 
     @PutMapping("/coupons/templates/{id}/status")
     @Operation(summary = "启用/禁用优惠券模板")
-    public Result<Void> toggleTemplateStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public Result<Void> toggleTemplateStatus(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         CouponTemplate template = couponTemplateMapper.selectById(id);
         if (template == null) {
             return Result.fail(404, "优惠券模板不存在");
@@ -103,78 +101,10 @@ public class AdminMarketingController {
         return Result.success();
     }
 
-    // ======================== 促销活动 ========================
-
-    @GetMapping("/promotions")
-    @Operation(summary = "促销活动列表")
-    public Result<PageResult<Promotion>> listPromotions(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize,
-            @RequestParam(required = false) String type,
-            @RequestParam(required = false) Integer status) {
-        LambdaQueryWrapper<Promotion> wrapper = new LambdaQueryWrapper<Promotion>()
-                .eq(StringUtils.hasText(type), Promotion::getType, type)
-                .eq(status != null, Promotion::getStatus, status)
-                .orderByDesc(Promotion::getCreateTime);
-        Page<Promotion> p = promotionMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-        return Result.success(PageResult.of(p.getCurrent(), p.getSize(), p.getTotal(), p.getRecords()));
-    }
-
-    @PostMapping("/promotions")
-    @Operation(summary = "创建促销活动")
-    @SneakyThrows
-    public Result<Void> createPromotion(@RequestBody Map<String, Object> body) {
-        Promotion promotion = new Promotion();
-        promotion.setName((String) body.get("name"));
-        promotion.setType((String) body.get("type"));
-        if (body.get("productId") != null) promotion.setProductId(Long.valueOf(body.get("productId").toString()));
-        if (body.get("skuId") != null) promotion.setSkuId(Long.valueOf(body.get("skuId").toString()));
-        if (body.get("rules") != null) {
-            Object rulesObj = body.get("rules");
-            promotion.setRules(rulesObj instanceof String ? (String) rulesObj : objectMapper.writeValueAsString(rulesObj));
-        }
-        promotion.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        promotion.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
-        promotion.setStatus(1);
-        promotion.setCreateTime(LocalDateTime.now());
-        promotion.setUpdateTime(LocalDateTime.now());
-        promotionMapper.insert(promotion);
-        return Result.success();
-    }
-
-    @PutMapping("/promotions/{id}")
-    @Operation(summary = "更新促销活动")
-    @SneakyThrows
-    public Result<Void> updatePromotion(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        Promotion promotion = promotionMapper.selectById(id);
-        if (promotion == null) {
-            return Result.fail(404, "促销活动不存在");
-        }
-        if (body.containsKey("name")) promotion.setName((String) body.get("name"));
-        if (body.containsKey("type")) promotion.setType((String) body.get("type"));
-        if (body.containsKey("productId")) promotion.setProductId(Long.valueOf(body.get("productId").toString()));
-        if (body.containsKey("skuId")) promotion.setSkuId(Long.valueOf(body.get("skuId").toString()));
-        if (body.containsKey("rules")) {
-            Object rulesObj = body.get("rules");
-            promotion.setRules(rulesObj instanceof String ? (String) rulesObj : objectMapper.writeValueAsString(rulesObj));
-        }
-        if (body.containsKey("startTime")) promotion.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        if (body.containsKey("endTime")) promotion.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
-        promotion.setUpdateTime(LocalDateTime.now());
-        promotionMapper.updateById(promotion);
-        return Result.success();
-    }
-
-    @PutMapping("/promotions/{id}/status")
-    @Operation(summary = "启用/禁用促销活动")
-    public Result<Void> togglePromotionStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        Promotion promotion = promotionMapper.selectById(id);
-        if (promotion == null) {
-            return Result.fail(404, "促销活动不存在");
-        }
-        promotion.setStatus((Integer) body.get("status"));
-        promotion.setUpdateTime(LocalDateTime.now());
-        promotionMapper.updateById(promotion);
+    @DeleteMapping("/coupons/templates/{id}")
+    @Operation(summary = "删除优惠券模板")
+    public Result<Void> deleteTemplate(@PathVariable("id") Long id) {
+        couponTemplateMapper.deleteById(id);
         return Result.success();
     }
 
@@ -183,10 +113,10 @@ public class AdminMarketingController {
     @GetMapping("/banners")
     @Operation(summary = "轮播图列表")
     public Result<PageResult<Banner>> listBanners(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize,
-            @RequestParam(required = false) String position,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(name = "pageNum", defaultValue = "1") Integer pageNum,
+            @RequestParam(name = "pageSize", defaultValue = "20") Integer pageSize,
+            @RequestParam(value = "position", required = false) String position,
+            @RequestParam(value = "status", required = false) Integer status) {
         LambdaQueryWrapper<Banner> wrapper = new LambdaQueryWrapper<Banner>()
                 .eq(StringUtils.hasText(position), Banner::getPosition, position)
                 .eq(status != null, Banner::getStatus, status)
@@ -206,8 +136,8 @@ public class AdminMarketingController {
         banner.setLinkUrl((String) body.get("linkUrl"));
         banner.setSort((Integer) body.getOrDefault("sort", 0));
         banner.setStatus((Integer) body.getOrDefault("status", 1));
-        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         banner.setCreateTime(LocalDateTime.now());
         banner.setUpdateTime(LocalDateTime.now());
         bannerMapper.insert(banner);
@@ -216,7 +146,7 @@ public class AdminMarketingController {
 
     @PutMapping("/banners/{id}")
     @Operation(summary = "更新轮播图")
-    public Result<Void> updateBanner(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public Result<Void> updateBanner(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         Banner banner = bannerMapper.selectById(id);
         if (banner == null) {
             return Result.fail(404, "轮播图不存在");
@@ -227,8 +157,8 @@ public class AdminMarketingController {
         if (body.containsKey("position")) banner.setPosition((String) body.get("position"));
         if (body.containsKey("linkUrl")) banner.setLinkUrl((String) body.get("linkUrl"));
         if (body.containsKey("sort")) banner.setSort((Integer) body.get("sort"));
-        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime")));
-        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime")));
+        if (body.containsKey("startTime")) banner.setStartTime(LocalDateTime.parse((String) body.get("startTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (body.containsKey("endTime")) banner.setEndTime(LocalDateTime.parse((String) body.get("endTime"), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         banner.setUpdateTime(LocalDateTime.now());
         bannerMapper.updateById(banner);
         return Result.success();
@@ -236,7 +166,7 @@ public class AdminMarketingController {
 
     @PutMapping("/banners/{id}/status")
     @Operation(summary = "启用/禁用轮播图")
-    public Result<Void> toggleBannerStatus(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public Result<Void> toggleBannerStatus(@PathVariable("id") Long id, @RequestBody Map<String, Object> body) {
         Banner banner = bannerMapper.selectById(id);
         if (banner == null) {
             return Result.fail(404, "轮播图不存在");
@@ -249,7 +179,7 @@ public class AdminMarketingController {
 
     @DeleteMapping("/banners/{id}")
     @Operation(summary = "删除轮播图")
-    public Result<Void> deleteBanner(@PathVariable Long id) {
+    public Result<Void> deleteBanner(@PathVariable("id") Long id) {
         Banner banner = bannerMapper.selectById(id);
         if (banner == null) {
             return Result.fail(404, "轮播图不存在");

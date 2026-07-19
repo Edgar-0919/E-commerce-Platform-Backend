@@ -15,6 +15,7 @@ public class UserContext {
     private String username;
     private String nickname;
     private List<String> roles;
+    private Long merchantId;
 
     // InheritableThreadLocal 确保子线程（如 @Async 异步方法）也能继承父线程的上下文
     private static final ThreadLocal<UserContext> CONTEXT = new InheritableThreadLocal<>();
@@ -39,5 +40,16 @@ public class UserContext {
     public static String currentUsername() {
         UserContext ctx = get();
         return ctx != null ? ctx.getUsername() : null;
+    }
+
+    public static Long currentMerchantId() {
+        UserContext ctx = get();
+        return ctx != null ? ctx.getMerchantId() : null;
+    }
+
+    /** 是否为平台管理员（可查看所有商户数据） */
+    public static boolean isAdmin() {
+        UserContext ctx = get();
+        return ctx != null && ctx.getRoles() != null && ctx.getRoles().contains("ROLE_ADMIN");
     }
 }

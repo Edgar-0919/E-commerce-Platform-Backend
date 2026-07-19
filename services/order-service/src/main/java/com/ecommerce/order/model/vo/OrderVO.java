@@ -1,5 +1,6 @@
 package com.ecommerce.order.model.vo;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -8,9 +9,12 @@ import java.util.List;
 @Data
 public class OrderVO {
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long id;
     private String orderNo;
+    @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long userId;
+    private String username;
     private BigDecimal totalAmount;
     private BigDecimal discountAmount;
     private BigDecimal payAmount;

@@ -10,25 +10,27 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/admin/products")
 @RequiredArgsConstructor
 @Tag(name = "管理端-商品管理", description = "商品CRUD、上下架、删除")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminProductController {
 
     private final ProductService productService;
 
     @GetMapping
     @Operation(summary = "商品列表")
-    public Result<PageResult<ProductVO>> list(ProductQueryDTO query) {
+    public Result<PageResult<ProductVO>> list(@ModelAttribute ProductQueryDTO query) {
         return Result.success(productService.page(query));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "商品详情")
-    public Result<ProductVO> getById(@PathVariable Long id) {
+    public Result<ProductVO> getById(@PathVariable("id") Long id) {
         return Result.success(productService.getById(id));
     }
 
@@ -41,21 +43,21 @@ public class AdminProductController {
 
     @PutMapping("/{id}")
     @Operation(summary = "修改商品")
-    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody ProductSaveDTO dto) {
+    public Result<Void> update(@PathVariable("id") Long id, @Valid @RequestBody ProductSaveDTO dto) {
         productService.update(id, dto);
         return Result.success();
     }
 
     @PutMapping("/{id}/status")
     @Operation(summary = "商品上下架")
-    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+    public Result<Void> updateStatus(@PathVariable("id") Long id, @RequestParam("status") Integer status) {
         productService.updateStatus(id, status);
         return Result.success();
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除商品（逻辑删除）")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable("id") Long id) {
         productService.delete(id);
         return Result.success();
     }

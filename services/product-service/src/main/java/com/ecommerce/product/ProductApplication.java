@@ -2,11 +2,10 @@ package com.ecommerce.product;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
-import org.redisson.spring.starter.RedissonAutoConfiguration;
+import org.springframework.cloud.openfeign.EnableFeignClients;
 
-@SpringBootApplication(scanBasePackages = "com.ecommerce",
-        exclude = {RedisAutoConfiguration.class})
+@SpringBootApplication(scanBasePackages = "com.ecommerce")
+@EnableFeignClients(basePackages = "com.ecommerce.product")
 public class ProductApplication {
 
     public static void main(String[] args) {

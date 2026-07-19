@@ -5,17 +5,7 @@ spring:
   application:
     name: order-service
   config:
-    import: nacos:${spring.application.name}.yaml
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/db_order?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: root123
-    type: com.alibaba.druid.pool.DruidDataSource
-    druid:
-      initial-size: 5
-      min-idle: 5
-      max-active: 20
+    import: nacos:order-service.yaml
   cloud:
     nacos:
       discovery:
@@ -27,70 +17,36 @@ spring:
           - data-id: common-config.yaml
             group: DEFAULT_GROUP
             refresh: true
-    sentinel:
-      transport:
-        dashboard: localhost:8720
-        port: 8722
-      eager: true
     stream:
-      default-binder: rabbit
       function:
-        definition: refundSuccess
+        definition: orderTimeout;paymentSuccess
       bindings:
-        refundSuccess-in-0:
-          destination: refund-success
-          group: ${spring.application.name}
+        # 延迟发送 binding：发送带 TTL 的消息到 order-timeout-delay 延迟交换机（Producer 侧 sendDelay 用）
+        orderTimeoutDelay-out-0:
+          destination: order-timeout-delay
           content-type: application/json
-        orderCreated-out-0:
-          destination: order-created
+        # 业务消费 binding：TTL到期后经 DLX 转发到 order-timeout 业务交换机 → OrderTimeoutConsumer 消费
+        orderTimeout-in-0:
+          destination: order-timeout
+          group: ${spring.application.name}-group
+          consumer:
+            max-attempts: 3
+        # 支付成功输出 binding：通知 product-service 扣减库存（跨服务 MQ）
+        paymentSuccess-out-0:
+          destination: payment-success
+          content-type: application/json
+        # 退款成功输出 binding：通知 product-service 恢复库存（跨服务 MQ）
+        refundSuccess-out-0:
+          destination: refund-success
+          content-type: application/json
+        # 优惠券核销输出 binding：通知 marketing-service 核销优惠券（跨服务 MQ）
+        couponUse-out-0:
+          destination: coupon-use
           content-type: application/json
       rabbit:
         bindings:
-          refundSuccess-in-0:
+          orderTimeout-in-0:
             consumer:
               auto-bind-dlq: true
               republish-to-dlq: true
-
-mybatis-plus:
-  configuration:
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
-  mapper-locations: classpath*:mapper/**/*.xml
-  type-aliases-package: com.ecommerce.order.model.entity
-
-knife4j:
-  enable: true
-
-logging:
-  level:
-    com.ecommerce: debug
-
-# Seata 分布式事务配置 — AT 模式
-seata:
-  registry:
-    type: nacos
-    nacos:
-      server-addr: localhost:8848
-      group: SEATA_GROUP
-  config:
-    type: nacos
-    nacos:
-      server-addr: localhost:8848
-      group: SEATA_GROUP
-  tx-service-group: ecommerce-tx-group
-  service:
-    vgroup-mapping:
-      ecommerce-tx-group: default
-  data-source-proxy-mode: AT
-
-# Micrometer Tracing — 链路追踪上报到 Zipkin
-management:
-  tracing:
-    sampling:
-      probability: 1.0
-  zipkin:
-    tracing:
-      endpoint: http://localhost:9411/api/v2/spans
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
+              declare-exchange: true

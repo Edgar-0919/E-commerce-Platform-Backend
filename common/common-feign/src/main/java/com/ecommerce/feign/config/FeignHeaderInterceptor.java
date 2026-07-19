@@ -12,7 +12,8 @@ import feign.RequestTemplate;
  * - X-User-Id: 用户ID
  * - X-Username: 用户名
  * - X-User-Roles: 用户角色列表
- * <p>配合UserContextInterceptor使用，实现服务间用户身份传递
+ * - X-Merchant-Id: 商户ID
+ * <p>配合UserContextFilter使用，实现服务间用户身份与租户上下文传递
  */
 public class FeignHeaderInterceptor implements RequestInterceptor {
 
@@ -28,6 +29,10 @@ public class FeignHeaderInterceptor implements RequestInterceptor {
             if (ctx.getRoles() != null && !ctx.getRoles().isEmpty()) {
                 template.header(GlobalConstants.USER_ROLES_HEADER,
                         String.join(",", ctx.getRoles()));
+            }
+            if (ctx.getMerchantId() != null) {
+                template.header(GlobalConstants.MERCHANT_ID_HEADER,
+                        String.valueOf(ctx.getMerchantId()));
             }
         }
     }

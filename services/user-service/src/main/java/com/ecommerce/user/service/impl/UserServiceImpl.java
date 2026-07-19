@@ -5,10 +5,12 @@ import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.TokenPayload;
 import com.ecommerce.security.util.JwtUtils;
+import com.ecommerce.user.mapper.MerchantApplicationMapper;
 import com.ecommerce.user.mapper.RoleMapper;
 import com.ecommerce.user.mapper.UserMapper;
 import com.ecommerce.user.model.dto.LoginDTO;
 import com.ecommerce.user.model.dto.RegisterDTO;
+import com.ecommerce.user.model.entity.MerchantApplication;
 import com.ecommerce.user.model.entity.User;
 import com.ecommerce.user.model.vo.LoginVO;
 import com.ecommerce.user.model.vo.UserVO;
@@ -19,6 +21,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -39,6 +43,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
+    private final MerchantApplicationMapper applicationMapper;
     // BCrypt 哈希密码，static final 避免重复创建 encoder 实例
     private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder();
 
@@ -69,6 +74,7 @@ public class UserServiceImpl implements UserService {
         payload.setUsername(user.getUsername());
         payload.setNickname(user.getNickname());
         payload.setRoles(roles);
+        payload.setMerchantId(user.getMerchantId());
 
         String token = JwtUtils.generateToken(payload);
 
@@ -108,6 +114,9 @@ public class UserServiceImpl implements UserService {
         user.setStatus(1);
         userMapper.insert(user);
 
+        // 默认分配普通用户角色（ROLE_USER）
+        userMapper.insertUserRole(IdWorker.getId(), user.getId(), 1L);
+
         log.info("用户注册成功: username={}, id={}", dto.getUsername(), user.getId());
     }
 
@@ -121,7 +130,27 @@ public class UserServiceImpl implements UserService {
         UserVO vo = new UserVO();
         BeanUtils.copyProperties(user, vo);
         vo.setRoles(roles != null ? roles : Collections.emptyList());
+
+        LambdaQueryWrapper<MerchantApplication> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MerchantApplication::getUserId, userId);
+        wrapper.orderByDesc(MerchantApplication::getCreateTime);
+        wrapper.last("LIMIT 1");
+        MerchantApplication application = applicationMapper.selectOne(wrapper);
+        if (application != null) {
+            vo.setMerchantApplicationStatus(application.getStatus());
+            vo.setMerchantApplicationStatusText(getApplicationStatusText(application.getStatus()));
+        }
+
         return vo;
+    }
+
+    private String getApplicationStatusText(Integer status) {
+        return switch (status) {
+            case 0 -> "待审核";
+            case 1 -> "已通过";
+            case 2 -> "已拒绝";
+            default -> "未知";
+        };
     }
 
     @Override

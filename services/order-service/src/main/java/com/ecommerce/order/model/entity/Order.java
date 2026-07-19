@@ -16,6 +16,8 @@ public class Order {
     // orderNo 对外暴露，id 内部使用（防止恶意遍历）
     private String orderNo;
     private Long userId;
+    private Long merchantId;
+    private Long couponId;
     // 商品原价合计
     private BigDecimal totalAmount;
     // 优惠金额（优惠券+满减+积分抵扣）

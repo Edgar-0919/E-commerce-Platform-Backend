@@ -1,7 +1,6 @@
 package com.ecommerce.order.feign;
 
 import com.ecommerce.order.model.dto.StockOperationDTO;
-import com.ecommerce.order.feign.fallback.InventoryFeignFallbackFactory;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -10,11 +9,9 @@ import java.util.List;
 
 /**
  * 库存服务 Feign 客户端 — 库存锁定与释放
- * <p>
- * fallbackFactory：调用失败时触发降级，避免订单创建链路中断
+ * 注意：inventory-service 已合并到 product-service，服务名指向 product-service
  */
-@FeignClient(name = "inventory-service", path = "/api/inventory",
-        fallbackFactory = InventoryFeignFallbackFactory.class)
+@FeignClient(name = "product-service", contextId = "order-inventory", path = "/api/inventory")
 public interface InventoryFeignClient {
 
     @PostMapping("/lock")

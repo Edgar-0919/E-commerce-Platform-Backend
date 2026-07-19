@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
@@ -33,10 +35,10 @@ public class AdminUserController {
     @GetMapping
     @Operation(summary = "用户分页列表")
     public Result<PageResult<UserVO>> page(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "20") Integer pageSize,
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(value = "pageNum", defaultValue = "1") Integer pageNum,
+            @RequestParam(value = "pageSize", defaultValue = "20") Integer pageSize,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "status", required = false) Integer status) {
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
                 .like(StringUtils.hasText(keyword), User::getUsername, keyword)
                 .eq(status != null, User::getStatus, status)
@@ -54,7 +56,7 @@ public class AdminUserController {
 
     @GetMapping("/{id}")
     @Operation(summary = "用户详情")
-    public Result<UserVO> getById(@PathVariable Long id) {
+    public Result<UserVO> getById(@PathVariable("id") Long id) {
         User user = userMapper.selectById(id);
         if (user == null) {
             return Result.fail(10001, "用户不存在");
@@ -66,9 +68,22 @@ public class AdminUserController {
         return Result.success(vo);
     }
 
+    @GetMapping("/batch/usernames")
+    @Operation(summary = "批量查询用户名（供订单管理等下游服务填充用户名）")
+    public Result<Map<Long, String>> getUsernames(
+            @RequestParam("ids") List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Result.success(Map.of());
+        }
+        List<User> users = userMapper.selectBatchIds(userIds);
+        Map<Long, String> map = users.stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername, (a, b) -> a));
+        return Result.success(map);
+    }
+
     @PutMapping("/{id}/status")
     @Operation(summary = "启用/禁用用户")
-    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+    public Result<Void> updateStatus(@PathVariable("id") Long id, @RequestParam("status") Integer status) {
         User user = userMapper.selectById(id);
         if (user == null) {
             return Result.fail(10001, "用户不存在");
@@ -80,7 +95,7 @@ public class AdminUserController {
 
     @PutMapping("/{id}/roles")
     @Operation(summary = "分配角色")
-    public Result<Void> assignRoles(@PathVariable Long id, @RequestBody Map<String, List<String>> body) {
+    public Result<Void> assignRoles(@PathVariable("id") Long id, @RequestBody Map<String, List<String>> body) {
         List<String> roleCodes = body.get("roles");
         if (roleCodes == null || roleCodes.isEmpty()) {
             return Result.success();
@@ -90,7 +105,7 @@ public class AdminUserController {
         for (String code : roleCodes) {
             Role matched = allRoles.stream().filter(r -> r.getRoleCode().equals(code)).findFirst().orElse(null);
             if (matched != null) {
-                userMapper.insertUserRole(id, matched.getId());
+                userMapper.insertUserRole(IdWorker.getId(), id, matched.getId());
             }
         }
         return Result.success();

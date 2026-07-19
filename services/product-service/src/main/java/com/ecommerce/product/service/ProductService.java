@@ -9,10 +9,14 @@ import com.ecommerce.product.model.vo.ProductVO;
 import com.ecommerce.product.model.vo.SkuVO;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ProductService {
 
     PageResult<ProductVO> page(ProductQueryDTO query);
+
+    /** MySQL LIKE 搜索（替代 ES 全文搜索） */
+    PageResult<ProductVO> search(ProductQueryDTO query);
 
     ProductVO getById(Long id);
 
@@ -29,6 +33,6 @@ public interface ProductService {
     /** 删除商品（逻辑删除） */
     void delete(Long id);
 
-    /** 获取全部上架商品（供 ES 全量索引） */
-    List<ProductVO> getAllOnSale();
+    /** 批量查询商品名称，返回 id → name 映射 */
+    Map<Long, String> getProductNames(List<Long> ids);
 }

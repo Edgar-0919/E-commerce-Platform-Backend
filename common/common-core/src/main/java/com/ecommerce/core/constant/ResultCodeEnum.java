@@ -51,7 +51,8 @@ public enum ResultCodeEnum {
     // 支付相关 40000-49999
     PAYMENT_NOT_EXIST(40001, "支付记录不存在"),
     PAYMENT_AMOUNT_ERROR(40002, "支付金额不匹配"),
-    REFUND_AMOUNT_ERROR(40003, "退款金额超出"),
+    PAYMENT_STATUS_INVALID(40003, "支付状态不允许此操作"),
+    REFUND_AMOUNT_ERROR(40004, "退款金额超出"),
 
     // 库存相关 50000-59999
     STOCK_INSUFFICIENT(50001, "库存不足"),
@@ -65,9 +66,6 @@ public enum ResultCodeEnum {
     COUPON_EXPIRED(80001, "优惠券已过期"),
     COUPON_NOT_AVAILABLE(80002, "优惠券不可用"),
     COUPON_STOCK_INSUFFICIENT(80003, "优惠券已领完"),
-    SECKILL_NOT_START(80004, "秒杀未开始"),
-    SECKILL_SOLD_OUT(80005, "秒杀已售罄"),
-    POINTS_INSUFFICIENT(80006, "积分不足"),
     PROMOTION_EXPIRED(80007, "促销活动已过期");
 
     private final int code;

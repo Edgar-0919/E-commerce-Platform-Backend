@@ -19,5 +19,6 @@ public class User extends BaseEntity {
     private String email;
     private String avatar;
     private Integer status;
+    private Long merchantId;
     private LocalDateTime lastLoginTime;
 }

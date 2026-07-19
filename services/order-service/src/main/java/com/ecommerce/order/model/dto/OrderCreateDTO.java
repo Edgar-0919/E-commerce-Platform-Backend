@@ -16,6 +16,7 @@ public class OrderCreateDTO {
     private Long addressId;
 
     private String remark;
+    /** 使用的优惠券ID（用户优惠券ID） */
     private Long couponId;
 }
 

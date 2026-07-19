@@ -1,7 +1,7 @@
 # 小羊电商 — 后端服务
 
 基于 Spring Cloud Alibaba 微服务架构的电商平台后端。
-前端仓库：[frontend](https://github.com/Edgar-0919/E-commerce-Platform-Frontend)
+前端仓库：[frontend](https://github.com/Edgar-0919/E-Commerce-Platform-Frontend)
 
 ## 技术栈
 
@@ -20,7 +20,7 @@
 | 服务容错 | Sentinel — 流控、熔断降级、热点参数限流、系统自适应 | （由 SCA BOM 管理） |
 | 消息驱动 | Spring Cloud Stream（RabbitMQ Binder）— 函数式编程模型 | 4.1.0 |
 | 分布式链路追踪 | Micrometer Tracing + Brave + Zipkin | （由 Spring Boot 3.2.4 管理） |
-| 分布式事务 | Seata AT 模式 | 2.0.0 |
+| 数据一致性 | 消息队列 + 幂等 + 对账兜底（最终一致） | - |
 | API 文档 | Knife4j (OpenAPI 3) | 4.5.0 |
 
 ## 项目结构
@@ -37,14 +37,10 @@ backend/
 │   ├── common-mq/                  # RocketMQ 生产者抽象
 │   └── common-feign/               # Feign 拦截器（传递用户上下文）
 ├── gateway/                        # API 网关（JWT 解析、路由转发、CORS）
-├── services/                       # 微服务（8 个）
-│   ├── user-service/               # 用户中心
-│   ├── product-service/            # 商品服务
-│   ├── order-service/              # 订单服务
-│   ├── payment-service/            # 支付服务
-│   ├── inventory-service/          # 库存服务
-│   ├── cart-service/               # 购物车服务
-│   ├── search-service/             # 搜索服务
+├── services/                       # 微服务（4 个）
+│   ├── user-service/               # 用户中心（含商户申请、商户管理）
+│   ├── product-service/            # 商品服务（含库存、搜索）
+│   ├── order-service/              # 订单服务（含支付、购物车）
 │   └── marketing-service/          # 营销服务
 ├── sql/                            # 各服务建表 SQL
 └── docker/                         # Docker Compose 基础设施
@@ -61,20 +57,12 @@ backend/
                           │   Gateway   │──────▶│ user-service     │
                           │   :8080     │──┐    │ product-service  │
                           └─────────────┘  │    │ order-service    │
-                                           ├───▶│ payment-service  │
-                                           │    │ inventory-service│
-                                           │    │ cart-service     │
-                                           │    │ search-service   │
-                                           │    │ marketing-service│
+                                           ├───▶│ marketing-service│
                                            │    └──────────────────┘
                                            │
                                            ├── Redis（库存扣减、缓存）
                                            ├── RabbitMQ（异步消息 / Spring Cloud Stream）
-                                           ├── Elasticsearch（商品搜索）
-                                           ├── Sentinel Dashboard（流控监控）
-                                           ├── Seata Server（分布式事务协调）
-                                           ├── Zipkin（链路追踪）
-                                           └── MySQL × 8（每服务独立数据库）
+                                           └── MySQL × 4（每服务独立数据库）
 ```
 
 ## 微服务内部包结构
@@ -100,15 +88,11 @@ backend/
 
 | 模块 | 功能 |
 |------|------|
-| Gateway | JWT 解析与认证、路由转发、CORS、Sentinel 网关限流 |
-| 用户中心 | 注册登录、个人信息管理、收货地址 CRUD |
-| 商品服务 | 商品列表/详情、分类树、品牌管理、SKU/规格管理、商品上下架、MQ 同步 ES |
-| 订单服务 | 下单（含库存锁定 + Seata 分布式事务 + 优惠券核销）、订单列表/详情、取消订单、订单日志、MQ 清除购物车 |
-| 支付服务 | 发起支付、支付回调、退款、支付日志（幂等）、MQ 通知库存持久化 |
-| 库存服务 | Redis Lua 原子锁库存/释放/扣减、库存预警、乐观锁持久化 |
-| 购物车 | 添加/修改/删除、同 SKU 合并数量、MQ 监听下单后清除 |
-| 搜索服务 | 商品全文搜索（ES）、搜索建议、筛选条件、MQ 监听商品变更 |
-| 营销服务 | 优惠券（领取/使用）、积分（增减/流水）、促销活动 |
+| Gateway | JWT 解析与认证、路由转发、CORS、商户数据隔离 |
+| 用户中心 | 注册登录（默认ROLE_USER）、个人信息管理、收货地址 CRUD、商户入驻申请、商户管理 |
+| 商品服务 | 商品列表/详情、分类树、品牌管理、SKU/规格管理、商品上下架、库存扣减 |
+| 订单服务 | 下单（含库存锁定 + 优惠券核销）、订单列表/详情、取消订单、支付、购物车管理 |
+| 营销服务 | 优惠券（领取/使用）、轮播图管理 |
 
 ## 快速开始
 
@@ -125,7 +109,7 @@ cd docker
 docker compose up -d
 ```
 
-启动 MySQL（3306）、Redis（6379）、Nacos（8848）、Elasticsearch（9200）、RabbitMQ（5672/15672）、Sentinel Dashboard（8730）、Seata Server（7091/8091）、Zipkin（9411）。
+启动 MySQL（3306）、Redis（6379）、Nacos（8848）、RabbitMQ（5672/15672）。
 
 SQL 建表脚本在容器启动时自动执行（`sql/` 挂载到 MySQL 容器的 `/docker-entrypoint-initdb.d`）。
 
@@ -154,23 +138,33 @@ mvn spring-boot:run
 |------|------|
 | Gateway | 8080 |
 | Nacos | 8848 |
-| Sentinel Dashboard | 8730 |
-| Seata Server | 7091 (控制台), 8091 (RPC) |
-| Zipkin | 9411 |
 | user-service | 8101 |
 | product-service | 8102 |
 | order-service | 8103 |
-| payment-service | 8104 |
-| inventory-service | 8105 |
-| cart-service | 8106 |
-| search-service | 8107 |
 | marketing-service | 8108 |
 
 ## 架构约定
 
 ### 认证流程
 
-Gateway 解析 JWT → 将 userId/username/roles 写入请求头 `X-User-Id`、`X-Username`、`X-User-Roles` → 下游服务从请求头读取（不再重复解析 JWT）→ 微服务内通过 `UserContext.get()` 获取当前用户
+Gateway 解析 JWT → 将 userId/username/roles/merchantId 写入请求头 `X-User-Id`、`X-Username`、`X-User-Roles`、`X-Merchant-Id` → 下游服务从请求头读取（不再重复解析 JWT）→ 微服务内通过 `UserContext.get()` 获取当前用户
+
+### 商户数据隔离
+
+- 使用 MyBatis-Plus `TenantLineInnerInterceptor` 实现商户数据隔离，自动在查询中注入 `merchant_id` 条件
+- 策略：**指定隔离表**模式，仅对 `t_product`、`t_sku`、`t_stock`、`t_stock_log`、`t_order`、`t_order_item` 表应用商户隔离
+- `ROLE_ADMIN` 用户传入 `X-Merchant-Id: ALL` 跳过租户过滤，可查看所有商户数据
+- C端用户（`merchantId == null`）时，所有表都不隔离，允许用户浏览全部商品
+- `t_merchant_application` 表跳过租户过滤，管理员可查看所有入驻申请
+
+### 商户入驻流程
+
+1. C端用户在个人中心点击"成为商家"，填写商户信息并提交申请
+2. 后端校验申请信息，检测是否已有待审核/已通过申请，防止重复提交
+3. B端管理员在商户管理页面查看入驻申请列表
+4. 管理员审核通过：自动创建商户记录、分配ROLE_MERCHANT角色、关联用户与商户
+5. 管理员审核拒绝：记录拒绝原因，用户可重新申请
+6. 用户信息API返回商户申请状态，用户中心显示状态徽章
 
 ### 统一响应格式
 
@@ -182,16 +176,16 @@ Gateway 解析 JWT → 将 userId/username/roles 写入请求头 `X-User-Id`、`
 
 - **同步调用**：OpenFeign（请求头通过 FeignHeaderInterceptor 自动传递）
 - 异步消息：Spring Cloud Stream + RabbitMQ
-  - `payment-success` → inventory-service, order-service
-  - `order-created` → cart-service
-  - `product-change` → search-service
-  - `refund-success` → order-service
-  - `coupon-use` → marketing-service
+  - `payment-success` → product-service（库存扣减）
+  - `order-created` → order-service 内部（购物车清除）
+  - `refund-success` → order-service（订单状态更新）
+  - `coupon-use` → marketing-service（优惠券核销）
 
-### 分布式事务
+### 数据一致性
 
-- **强一致场景**（订单创建+库存锁定+优惠券核销）：Seata AT 模式
-- **最终一致场景**（支付回调、商品同步 ES）：消息队列重试 + 幂等
+全部采用最终一致方案：
+- 订单创建：本地事务 + Feign 同步调用，失败触发本地回滚
+- 跨服务状态对齐：消息队列重试 + 幂等 + 定时对账兜底
 
 ### 数据库
 
@@ -227,10 +221,3 @@ Micrometer Tracing + Brave + Zipkin（Spring Boot 3.x 已移除 Sleuth）。
 Gateway + 所有微服务自动生成 traceId/spanId，日志格式：`[service-name,traceId,spanId]`。
 
 Zipkin UI 访问 `http://localhost:9411` 查看调用链路拓扑和耗时分析。
-
-### Seata 分布式事务
-
-AT 模式，`@GlobalTransactional` 协调订单创建 → 库存锁定 → 优惠券核销，任意分支失败自动回滚。
-
-参与服务（order、inventory、marketing）需建 `undo_log` 表。Seata 控制台访问 `http://localhost:7091`。
-

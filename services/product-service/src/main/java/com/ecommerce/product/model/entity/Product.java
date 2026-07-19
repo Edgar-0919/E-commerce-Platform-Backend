@@ -12,10 +12,11 @@ public class Product extends BaseEntity {
 
     private String name;
     private Long categoryId;
-    private Long brandId;
+    private Long merchantId;
     private String mainImage;
     private String images;
     private String description;
     private String unit;
     private Integer status;
+    private Integer salesCount;
 }

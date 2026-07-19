@@ -88,6 +88,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                 .header(GlobalConstants.USERNAME_HEADER, payload.getUsername())
                 .header(GlobalConstants.USER_ROLES_HEADER,
                         payload.getRoles() != null ? String.join(",", payload.getRoles()) : "")
+                .header(GlobalConstants.MERCHANT_ID_HEADER,
+                        payload.getMerchantId() != null ? String.valueOf(payload.getMerchantId()) : "")
                 .build();
 
         return chain.filter(exchange.mutate().request(request).build());
@@ -104,7 +106,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private boolean isAdminOnlyPath(String path) {
         return path.startsWith("/api/admin/users") || 
                path.startsWith("/api/admin/brands") || 
-               path.startsWith("/api/admin/categories");
+               path.startsWith("/api/admin/categories") ||
+               path.startsWith("/api/admin/merchants") ||
+               path.startsWith("/api/admin/merchant-applications");
     }
 
     @Override

@@ -38,12 +38,11 @@ public abstract class AbstractMqProducer {
      * @param payload     消息体（自动 JSON 序列化）
      */
     protected void send(String bindingName, Object payload) {
-        String json = JsonUtils.toJson(payload);
-        Message<String> message = MessageBuilder.withPayload(json).build();
+        Message<Object> message = MessageBuilder.withPayload(payload).build();
         if (streamBridge.send(bindingName, message)) {
-            log.info("[MQ发送] binding={}, payload={}", bindingName, json);
+            log.info("[MQ发送] binding={}, payload={}", bindingName, payload);
         } else {
-            log.error("[MQ发送失败] binding={}, payload={}", bindingName, json);
+            log.error("[MQ发送失败] binding={}, payload={}", bindingName, payload);
         }
     }
 
@@ -55,25 +54,33 @@ public abstract class AbstractMqProducer {
     }
 
     /**
-     * 发送延迟消息
+     * 发送延迟消息 — 基于 RabbitMQ 原生 TTL + DLX（死信交换机），不依赖任何插件。
      * <p>
-     * RabbitMQ 需启用 delayed-message-exchange 插件。
-     * 在 binding 的 producer 配置中设置 spring.cloud.stream.rabbit.bindings.{name}.producer.delayed-exchange=true
-     * 然后通过消息头 x-delay 设置延迟时间（毫秒）。
+     * 链路：Producer 发送消息（设置 AMQP expiration = TTL 毫秒数）
+     *        → 投递到 binding 对应的 delay Exchange
+     *        → 进入 Delay Queue（无消费者消费）
+     *        → TTL 到期自动转发到 DLX（死信交换机 = 真正的业务 Exchange）
+     *        → 由业务 Queue 接收，Consumer 消费（相当于延迟生效）。
+     * <p>
+     * 每个业务 binding 需要配套定义：
+     *   1) delay Exchange（类型 direct，比如 order-timeout-delay）
+     *   2) Delay Queue（绑定到 delay Exchange，参数含 x-dead-letter-exchange/x-dead-letter-routing-key）
+     *   3) 业务 Exchange（真正消费的 Exchange，比如 order-timeout）+ 业务 Queue
      *
-     * @param bindingName binding 名称
+     * @param bindingName binding 名称（应指向 delay exchange 对应的 output binding，不是业务 binding）
      * @param payload     消息体
-     * @param delayMs     延迟毫秒数
+     * @param delayMs     延迟毫秒数（消息级 TTL）
      */
     protected void sendDelay(String bindingName, Object payload, long delayMs) {
-        String json = JsonUtils.toJson(payload);
-        Message<String> message = MessageBuilder.withPayload(json)
-                .setHeader("x-delay", delayMs)
+        // AMQP 0-9-1 协议的 expiration 字段（毫秒数字符串）表示消息在队列中的最大存活时间
+        // Spring Cloud Stream Rabbit Binder 会自动识别该 header 并透传到 MessageProperties.expiration
+        Message<Object> message = MessageBuilder.withPayload(payload)
+                .setHeader("expiration", String.valueOf(delayMs))
                 .build();
         if (streamBridge.send(bindingName, message)) {
-            log.info("[MQ延迟发送] binding={}, delayMs={}, payload={}", bindingName, delayMs, json);
+            log.info("[MQ延迟发送] binding={}, ttlMs={}, payload={}", bindingName, delayMs, payload);
         } else {
-            log.error("[MQ延迟发送失败] binding={}, delayMs={}, payload={}", bindingName, delayMs, json);
+            log.error("[MQ延迟发送失败] binding={}, ttlMs={}, payload={}", bindingName, delayMs, payload);
         }
     }
 }

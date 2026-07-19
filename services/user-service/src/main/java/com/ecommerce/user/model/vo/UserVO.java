@@ -17,4 +17,6 @@ public class UserVO {
     private List<String> roles;
     private LocalDateTime lastLoginTime;
     private LocalDateTime createTime;
+    private Integer merchantApplicationStatus;
+    private String merchantApplicationStatusText;
 }

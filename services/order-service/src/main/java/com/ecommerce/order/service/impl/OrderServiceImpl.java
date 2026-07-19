@@ -7,8 +7,10 @@ import com.ecommerce.core.constant.ResultCodeEnum;
 import com.ecommerce.core.exception.BusinessException;
 import com.ecommerce.core.model.PageResult;
 import com.ecommerce.core.model.Result;
+import com.ecommerce.core.model.UserContext;
 import com.ecommerce.core.util.IdGenerator;
 import com.ecommerce.order.feign.InventoryFeignClient;
+import com.ecommerce.order.feign.MarketingFeignClient;
 import com.ecommerce.order.feign.ProductFeignClient;
 import com.ecommerce.order.feign.UserFeignClient;
 import com.ecommerce.order.mq.OrderEventProducer;
@@ -25,12 +27,13 @@ import com.ecommerce.order.model.entity.OrderLog;
 import com.ecommerce.order.model.vo.OrderItemVO;
 import com.ecommerce.order.model.vo.OrderVO;
 import com.ecommerce.order.service.OrderService;
-import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -50,7 +53,7 @@ import java.util.stream.Collectors;
  * 4. 订单状态更新
  * 事务策略：
  * - 使用@Transactional管理本地事务
- * - 跨服务调用通过Seata AT模式保证一致性
+ * - 跨服务调用通过消息队列+重试机制保障最终一致性
  */
 @Slf4j
 @Service
@@ -63,18 +66,17 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryFeignClient inventoryFeignClient;
     private final ProductFeignClient productFeignClient;
     private final UserFeignClient userFeignClient;
+    private final MarketingFeignClient marketingFeignClient;
     private final OrderEventProducer orderEventProducer;
 
     /**
      * 创建订单 — 电商核心流程
      * <p>
-     * @GlobalTransactional 协调 Seata AT 模式分布式事务：
-     * order-service（订单+订单项） + inventory-service（库存锁定） + marketing-service（优惠券核销）
-     * 任意一个环节失败则全部回滚
+     * 本地事务保障订单+订单项入库；库存锁定通过 Feign 同步调用，
+     * 失败时本地事务自动回滚；跨服务一致性通过消息队列+对账任务兜底。
      */
     @Override
     @Transactional
-    @GlobalTransactional(timeoutMills = 300000, name = "ecommerce-createOrder")
     public OrderVO createOrder(Long userId, OrderCreateDTO dto) {
         // 1. 通过 Feign 获取所有 SKU 信息，构建 skuId -> SKU 的映射
         Map<Long, SkuVO> skuMap = new HashMap<>();
@@ -103,13 +105,29 @@ public class OrderServiceImpl implements OrderService {
             totalAmount = totalAmount.add(itemAmount);
         }
 
-        // 3. Create order
+        // 3. 锁定优惠券并计算优惠金额（如果使用了优惠券）
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        if (dto.getCouponId() != null) {
+            try {
+                Result<BigDecimal> couponResult = marketingFeignClient.lockCoupon(dto.getCouponId(), totalAmount);
+                if (couponResult != null && couponResult.getCode() == 200 && couponResult.getData() != null) {
+                    discountAmount = couponResult.getData();
+                    log.info("优惠券锁定成功: couponId={}, discountAmount={}", dto.getCouponId(), discountAmount);
+                }
+            } catch (Exception e) {
+                log.error("优惠券锁定失败: couponId={}, error={}", dto.getCouponId(), e.getMessage());
+                throw new BusinessException(ResultCodeEnum.COUPON_NOT_AVAILABLE);
+            }
+        }
+
+        // 4. Create order
         Order order = new Order();
         order.setOrderNo(IdGenerator.orderNo());
         order.setUserId(userId);
+        order.setCouponId(dto.getCouponId());
         order.setTotalAmount(totalAmount);
-        order.setDiscountAmount(BigDecimal.ZERO);
-        order.setPayAmount(totalAmount);
+        order.setDiscountAmount(discountAmount);
+        order.setPayAmount(totalAmount.subtract(discountAmount));
         order.setStatus(OrderStatusEnum.PENDING_PAY.getCode());
         // 通过 Feign 查询用户收货地址，填充到订单
         try {
@@ -165,7 +183,7 @@ public class OrderServiceImpl implements OrderService {
             stockLocks.add(stockDTO);
         }
 
-        // 5. 通过 Feign 远程锁定库存（跨服务事务由 Seata AT 模式管理）
+        // 5. 通过 Feign 远程锁定库存
         // 锁库失败时抛出异常，Spring 事务回滚第2、3步的订单和订单项
         try {
             inventoryFeignClient.lockStock(stockLocks);
@@ -185,6 +203,14 @@ public class OrderServiceImpl implements OrderService {
             // MQ发送失败不阻断下单流程，购物车数据由定时任务兜底清理
         }
 
+        // 8. 发送延迟消息：30分钟后检查订单是否已支付，未支付则自动取消释放库存
+        try {
+            orderEventProducer.sendOrderTimeoutCheck(order.getId(), 30 * 60 * 1000);
+        } catch (Exception e) {
+            log.error("发送订单超时延迟消息失败: orderId={}", order.getId(), e);
+            // 延迟消息发送失败不阻断下单，由对账任务兜底
+        }
+
         log.info("订单创建成功: orderNo={}, userId={}, amount={}", order.getOrderNo(), userId, totalAmount);
         return toVO(order);
     }
@@ -193,8 +219,19 @@ public class OrderServiceImpl implements OrderService {
     public PageResult<OrderVO> page(Long userId, Integer page, Integer size, Integer status) {
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()
                 .eq(Order::getUserId, userId)
-                .eq(status != null, Order::getStatus, status)
                 .orderByDesc(Order::getCreateTime);
+
+        if (status != null) {
+            if (status == -1) {
+                // 售后：已收货 + 退款中 + 已退款
+                wrapper.in(Order::getStatus,
+                        OrderStatusEnum.RECEIVED.getCode(),
+                        OrderStatusEnum.REFUNDING.getCode(),
+                        OrderStatusEnum.REFUNDED.getCode());
+            } else {
+                wrapper.eq(Order::getStatus, status);
+            }
+        }
 
         Page<Order> p = orderMapper.selectPage(new Page<>(page, size), wrapper);
         List<Order> orders = p.getRecords();
@@ -218,7 +255,23 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderVO getById(Long id) {
         Order order = orderMapper.selectById(id);
-        if (order == null) throw new BusinessException(ResultCodeEnum.ORDER_NOT_EXIST);
+        if (order == null) {
+            log.warn("订单不存在: orderId={}", id);
+            throw new BusinessException(ResultCodeEnum.ORDER_NOT_EXIST.getCode(), ResultCodeEnum.ORDER_NOT_EXIST.getMessage());
+        }
+        
+        Long currentUserId = UserContext.currentUserId();
+        if (currentUserId == null) {
+            log.warn("用户上下文未设置，无法验证订单所有权: orderId={}", id);
+            throw new BusinessException(ResultCodeEnum.UNAUTHORIZED.getCode(), "请先登录");
+        }
+        
+        if (!order.getUserId().equals(currentUserId)) {
+            log.warn("无权查看此订单: orderId={}, userId={}, ownerUserId={}", 
+                    id, currentUserId, order.getUserId());
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN.getCode(), "无权查看此订单");
+        }
+        
         return toVO(order);
     }
 
@@ -243,11 +296,10 @@ public class OrderServiceImpl implements OrderService {
             throw new BusinessException(ResultCodeEnum.ORDER_CANNOT_CANCEL);
         }
 
-        // 释放已锁定的库存（即使释放失败也不阻塞取消流程，避免订单卡死）
-        // Release inventory
+        // 1. 提前加载订单项并组装库存释放请求（事务内 DB 读取，后续 afterCommit 使用）
         List<OrderItem> items = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getOrderId, order.getId()));
-        List<StockOperationDTO> releases = items.stream().map(item -> {
+        final List<StockOperationDTO> releases = items.stream().map(item -> {
             StockOperationDTO dto = new StockOperationDTO();
             dto.setOrderId(order.getId());
             dto.setSkuId(item.getSkuId());
@@ -255,18 +307,61 @@ public class OrderServiceImpl implements OrderService {
             return dto;
         }).collect(Collectors.toList());
 
-        try {
-            inventoryFeignClient.releaseStock(releases);
-        } catch (Exception e) {
-            log.error("库存释放失败: orderId={}", order.getId(), e);
-        }
-
+        // 2. 先更新订单状态为已取消 + 记录变更日志（事务内，失败则整体回滚）
         int fromStatus = order.getStatus();
         order.setStatus(OrderStatusEnum.CANCELLED.getCode());
         orderMapper.updateById(order);
-
         saveOrderLog(order.getId(), fromStatus, order.getStatus(), "用户取消订单", "USER");
+
+        // 3. 事务提交成功后再触发库存释放和优惠券释放（避免 Feign 成功但本地 DB 回滚导致的数据不一致）
+        //    库存释放失败仅记录日志，不阻塞订单取消；不一致情况由对账任务定时补偿
+        final Long orderId = order.getId();
+        final String orderNo = order.getOrderNo();
+        final Long couponId = order.getCouponId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    inventoryFeignClient.releaseStock(releases);
+                    log.info("订单取消-库存释放成功: orderNo={}", orderNo);
+                } catch (Exception e) {
+                    log.error("订单取消-库存释放失败: orderId={}", orderId, e);
+                }
+
+                if (couponId != null) {
+                    try {
+                        marketingFeignClient.releaseCoupon(couponId);
+                        log.info("订单取消-优惠券释放成功: orderNo={}, couponId={}", orderNo, couponId);
+                    } catch (Exception e) {
+                        log.error("订单取消-优惠券释放失败: orderId={}, couponId={}", orderId, couponId, e);
+                    }
+                }
+            }
+        });
+
         log.info("订单取消成功: orderNo={}", order.getOrderNo());
+    }
+
+    @Override
+    @Transactional
+    public void confirmReceive(Long userId, Long id) {
+        Order order = orderMapper.selectById(id);
+        if (order == null) throw new BusinessException(ResultCodeEnum.ORDER_NOT_EXIST);
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCodeEnum.FORBIDDEN.getCode(), "无权操作此订单");
+        }
+        // 仅已发货状态允许确认收货
+        if (order.getStatus() != OrderStatusEnum.DELIVERED.getCode()) {
+            throw new BusinessException(ResultCodeEnum.ORDER_STATUS_ERROR.getCode(), "当前订单状态不支持确认收货");
+        }
+
+        int fromStatus = order.getStatus();
+        order.setStatus(OrderStatusEnum.RECEIVED.getCode());
+        order.setReceiveTime(LocalDateTime.now());
+        orderMapper.updateById(order);
+
+        saveOrderLog(order.getId(), fromStatus, order.getStatus(), "用户确认收货", "USER");
+        log.info("确认收货成功: orderNo={}", order.getOrderNo());
     }
 
     // 供支付回调、退款回调等事件驱动的状态变更，非用户直接调用的接口
@@ -329,5 +424,10 @@ public class OrderServiceImpl implements OrderService {
         }).collect(Collectors.toList());
         vo.setItems(itemVOs);
         return vo;
+    }
+
+    @Override
+    public Order getOrderEntity(Long id) {
+        return orderMapper.selectById(id);
     }
 }

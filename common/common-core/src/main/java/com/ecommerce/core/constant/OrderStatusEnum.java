@@ -28,7 +28,8 @@ public enum OrderStatusEnum {
         this.desc = desc;
     }
 
-    public static OrderStatusEnum of(int code) {
+    public static OrderStatusEnum of(Integer code) {
+        if (code == null) return null;
         for (OrderStatusEnum e : values()) {
             if (e.code == code) return e;
         }
