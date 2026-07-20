@@ -12,6 +12,8 @@ public class Product extends BaseEntity {
 
     private String name;
     private Long categoryId;
+    private String categoryPath;
+    private String categoryName;
     private Long merchantId;
     private String mainImage;
     private String images;

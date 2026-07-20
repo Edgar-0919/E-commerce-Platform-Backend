@@ -15,6 +15,8 @@ import com.ecommerce.product.model.entity.*;
 import com.ecommerce.product.model.vo.CategoryVO;
 import com.ecommerce.product.model.vo.ProductVO;
 import com.ecommerce.product.model.vo.SkuVO;
+import com.ecommerce.product.model.vo.SpecGroupVO;
+import com.ecommerce.product.model.vo.SpecParamVO;
 import com.ecommerce.product.service.ProductService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.RequiredArgsConstructor;
@@ -168,6 +170,15 @@ public class ProductServiceImpl implements ProductService {
         product.setMerchantId(merchantId);
         product.setImages(dto.getImages() != null ? JsonUtils.toJson(dto.getImages()) : null);
         product.setStatus(1);
+        
+        if (dto.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(dto.getCategoryId());
+            if (category != null) {
+                product.setCategoryPath(category.getCategoryPath());
+                product.setCategoryName(category.getName());
+            }
+        }
+        
         productMapper.insert(product);
 
         List<Map<String, Object>> stockInitList = new ArrayList<>();
@@ -319,21 +330,27 @@ public class ProductServiceImpl implements ProductService {
             vo.setStock(0);
         } else {
             BigDecimal minPrice = null;
-            int totalStock = 0;
             skuVOs = new ArrayList<>(skus.size());
             for (Sku sku : skus) {
                 if (sku.getPrice() != null) {
                     minPrice = minPrice == null ? sku.getPrice() : minPrice.min(sku.getPrice());
                 }
-                if (sku.getStock() != null) {
-                    totalStock += sku.getStock();
-                }
                 skuVOs.add(toSkuVO(sku));
             }
             vo.setPrice(minPrice == null ? BigDecimal.ZERO : minPrice);
-            vo.setStock(totalStock);
         }
         vo.setSkus(skuVOs);
+
+        if (!skuVOs.isEmpty()) {
+            List<Long> skuIds = skuVOs.stream().map(SkuVO::getId).collect(Collectors.toList());
+            List<com.ecommerce.product.inventory.model.entity.Stock> stocks = stockMapper.selectList(
+                    new LambdaQueryWrapper<com.ecommerce.product.inventory.model.entity.Stock>()
+                            .in(com.ecommerce.product.inventory.model.entity.Stock::getSkuId, skuIds));
+            int totalStock = stocks.stream()
+                    .mapToInt(com.ecommerce.product.inventory.model.entity.Stock::getAvailableStock)
+                    .sum();
+            vo.setStock(totalStock);
+        }
 
         return vo;
     }
@@ -368,5 +385,51 @@ public class ProductServiceImpl implements ProductService {
         }
         List<Product> products = productMapper.selectBatchIds(ids);
         return products.stream().collect(Collectors.toMap(Product::getId, Product::getName));
+    }
+
+    @Override
+    public List<SpecGroupVO> getSpecGroupsByCategory(Long categoryId) {
+        List<SpecGroup> groups = specGroupMapper.selectList(new LambdaQueryWrapper<SpecGroup>()
+                .eq(SpecGroup::getCategoryId, categoryId)
+                .orderByAsc(SpecGroup::getSort));
+
+        if (groups.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> groupIds = groups.stream().map(SpecGroup::getId).collect(Collectors.toList());
+        List<SpecParam> params = specParamMapper.selectList(new LambdaQueryWrapper<SpecParam>()
+                .in(SpecParam::getGroupId, groupIds)
+                .orderByAsc(SpecParam::getSort));
+
+        Map<Long, List<SpecParam>> paramsMap = params.stream()
+                .collect(Collectors.groupingBy(SpecParam::getGroupId));
+
+        return groups.stream().map(group -> {
+            SpecGroupVO vo = new SpecGroupVO();
+            BeanUtils.copyProperties(group, vo);
+            List<SpecParam> groupParams = paramsMap.get(group.getId());
+            if (groupParams != null) {
+                vo.setParams(groupParams.stream().map(p -> {
+                    SpecParamVO pvo = new SpecParamVO();
+                    BeanUtils.copyProperties(p, pvo);
+                    if (p.getValues() != null && !p.getValues().isBlank()) {
+                        try {
+                            List<String> valueList = JsonUtils.fromJson(p.getValues(), 
+                                    new TypeReference<List<String>>() {});
+                            pvo.setParsedValues(valueList);
+                        } catch (Exception e) {
+                            pvo.setParsedValues(new ArrayList<>());
+                        }
+                    } else {
+                        pvo.setParsedValues(new ArrayList<>());
+                    }
+                    return pvo;
+                }).collect(Collectors.toList()));
+            } else {
+                vo.setParams(new ArrayList<>());
+            }
+            return vo;
+        }).collect(Collectors.toList());
     }
 }

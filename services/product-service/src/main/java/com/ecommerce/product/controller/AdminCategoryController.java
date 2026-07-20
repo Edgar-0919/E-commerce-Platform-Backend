@@ -34,7 +34,24 @@ public class AdminCategoryController {
     public Result<Void> save(@RequestBody Category category) {
         category.setCreateTime(LocalDateTime.now());
         categoryMapper.insert(category);
+        Category saved = categoryMapper.selectById(category.getId());
+        if (saved != null) {
+            String path = buildCategoryPath(saved);
+            saved.setCategoryPath(path);
+            categoryMapper.updateById(saved);
+        }
         return Result.success();
+    }
+
+    private String buildCategoryPath(Category category) {
+        if (category.getParentId() == null || category.getParentId() == 0) {
+            return String.valueOf(category.getId());
+        }
+        Category parent = categoryMapper.selectById(category.getParentId());
+        if (parent != null && parent.getCategoryPath() != null) {
+            return parent.getCategoryPath() + "/" + category.getId();
+        }
+        return category.getParentId() + "/" + category.getId();
     }
 
     @PutMapping("/{id}")

@@ -151,6 +151,9 @@ public class MarketingServiceImpl implements MarketingService {
             if (template.getEndTime().isBefore(LocalDateTime.now())) {
                 throw new BusinessException(ResultCodeEnum.COUPON_EXPIRED);
             }
+            if (template.getStartTime() != null && template.getStartTime().isAfter(LocalDateTime.now())) {
+                throw new BusinessException(ResultCodeEnum.COUPON_NOT_AVAILABLE.getCode(), "优惠券尚未生效");
+            }
 
             if (orderAmount.compareTo(template.getThreshold()) < 0) {
                 throw new BusinessException(ResultCodeEnum.COUPON_NOT_AVAILABLE.getCode(),

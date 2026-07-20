@@ -34,6 +34,9 @@ public class GatewayRouteConfig {
                 .route("admin-inventory", r -> r
                         .path("/api/admin/inventory/**")
                         .uri("lb://product-service"))
+                .route("admin-spec", r -> r
+                        .path("/api/admin/spec/**")
+                        .uri("lb://product-service"))
                 // 订单相关管理（订单/仪表盘/退款 → order-service）
                 .route("admin-orders", r -> r
                         .path("/api/admin/orders/**")

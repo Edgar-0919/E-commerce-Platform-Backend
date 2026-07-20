@@ -104,9 +104,11 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private boolean isAdminOnlyPath(String path) {
+        if (path.startsWith("/api/admin/categories")) {
+            return false;
+        }
         return path.startsWith("/api/admin/users") || 
-               path.startsWith("/api/admin/brands") || 
-               path.startsWith("/api/admin/categories") ||
+               path.startsWith("/api/admin/brands") ||
                path.startsWith("/api/admin/merchants") ||
                path.startsWith("/api/admin/merchant-applications");
     }

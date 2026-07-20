@@ -8,6 +8,7 @@ CREATE TABLE t_category (
     name VARCHAR(50) NOT NULL COMMENT '分类名称',
     parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '父分类ID, 0为顶级',
     level TINYINT NOT NULL DEFAULT 1 COMMENT '层级',
+    category_path VARCHAR(500) DEFAULT NULL COMMENT '分类路径,如:10/100',
     sort INT NOT NULL DEFAULT 0 COMMENT '排序',
     icon VARCHAR(255) DEFAULT NULL COMMENT '图标',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -19,6 +20,8 @@ CREATE TABLE t_product (
     id BIGINT NOT NULL PRIMARY KEY COMMENT '商品ID',
     name VARCHAR(200) NOT NULL COMMENT '商品名称',
     category_id BIGINT NOT NULL COMMENT '分类ID',
+    category_path VARCHAR(500) DEFAULT NULL COMMENT '分类路径,如:10/100',
+    category_name VARCHAR(200) DEFAULT NULL COMMENT '分类名称',
     merchant_id BIGINT NOT NULL DEFAULT 1 COMMENT '商户ID(默认1=平台自营)',
     main_image VARCHAR(255) DEFAULT NULL COMMENT '主图',
     images TEXT DEFAULT NULL COMMENT '商品图片集(JSON数组)',
@@ -120,3 +123,23 @@ CREATE TABLE t_stock_pre_lock (
     KEY idx_order_id (order_id),
     KEY idx_status_create (status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存预扣流水表';
+
+UPDATE t_category SET category_path = 
+    CASE 
+        WHEN parent_id = 0 THEN CONCAT(id)
+        WHEN parent_id = 10 THEN CONCAT('10/', id)
+        WHEN parent_id = 11 THEN CONCAT('11/', id)
+        WHEN parent_id = 12 THEN CONCAT('12/', id)
+        WHEN parent_id = 13 THEN CONCAT('13/', id)
+        WHEN parent_id = 14 THEN CONCAT('14/', id)
+        WHEN parent_id = 15 THEN CONCAT('15/', id)
+        WHEN parent_id = 16 THEN CONCAT('16/', id)
+        WHEN parent_id = 17 THEN CONCAT('17/', id)
+        WHEN parent_id = 18 THEN CONCAT('18/', id)
+        WHEN parent_id = 19 THEN CONCAT('19/', id)
+        ELSE CONCAT(parent_id, '/', id)
+    END;
+
+UPDATE t_product p
+JOIN t_category c ON p.category_id = c.id
+SET p.category_path = c.category_path, p.category_name = c.name;

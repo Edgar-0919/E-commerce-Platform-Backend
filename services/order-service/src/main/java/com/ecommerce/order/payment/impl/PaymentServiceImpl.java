@@ -163,8 +163,20 @@ public class PaymentServiceImpl implements PaymentService {
                 try {
                     Order order = orderService.getOrderEntity(payment.getOrderId());
                     if (order != null && order.getCouponId() != null) {
-                        marketingFeignClient.confirmCoupon(order.getCouponId(), order.getId());
-                        log.info("优惠券确认成功: orderId={}, couponId={}", order.getId(), order.getCouponId());
+                        try {
+                            marketingFeignClient.confirmCoupon(order.getCouponId(), order.getId());
+                            log.info("优惠券确认成功: orderId={}, couponId={}", order.getId(), order.getCouponId());
+                        } catch (Exception feignEx) {
+                            // Feign 调用失败，通过 MQ 兜底重试
+                            log.warn("优惠券Feign确认失败，改用MQ兜底: orderId={}, couponId={}", order.getId(), order.getCouponId(), feignEx);
+                            Map<String, Object> couponData = new java.util.HashMap<>();
+                            couponData.put("userId", order.getUserId());
+                            couponData.put("couponId", order.getCouponId());
+                            couponData.put("orderId", order.getId());
+                            couponData.put("orderNo", order.getOrderNo());
+                            paymentProducer.sendCouponUse(couponData);
+                            log.info("优惠券MQ兜底事件已发送: orderId={}, couponId={}", order.getId(), order.getCouponId());
+                        }
                     }
                 } catch (Exception e) {
                     log.error("优惠券确认失败(需补偿): orderId={}", payment.getOrderId(), e);

@@ -1,6 +1,7 @@
 package com.ecommerce.product.model.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -13,6 +14,7 @@ public class SpecParam {
     private Long id;
     private Long groupId;
     private String name;
+    @TableField("`values`")
     private String values;
     private Integer sort;
 }

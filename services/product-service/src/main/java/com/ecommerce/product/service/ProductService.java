@@ -7,6 +7,7 @@ import com.ecommerce.product.model.dto.ProductSaveDTO;
 import com.ecommerce.product.model.vo.CategoryVO;
 import com.ecommerce.product.model.vo.ProductVO;
 import com.ecommerce.product.model.vo.SkuVO;
+import com.ecommerce.product.model.vo.SpecGroupVO;
 
 import java.util.List;
 import java.util.Map;
@@ -35,4 +36,7 @@ public interface ProductService {
 
     /** 批量查询商品名称，返回 id → name 映射 */
     Map<Long, String> getProductNames(List<Long> ids);
+
+    /** 根据分类ID获取规格组和规格参数 */
+    List<SpecGroupVO> getSpecGroupsByCategory(Long categoryId);
 }

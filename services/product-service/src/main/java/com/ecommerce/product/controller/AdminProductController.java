@@ -5,6 +5,7 @@ import com.ecommerce.core.model.Result;
 import com.ecommerce.product.model.dto.ProductQueryDTO;
 import com.ecommerce.product.model.dto.ProductSaveDTO;
 import com.ecommerce.product.model.vo.ProductVO;
+import com.ecommerce.product.model.vo.SpecGroupVO;
 import com.ecommerce.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,11 +14,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/admin/products")
 @RequiredArgsConstructor
 @Tag(name = "管理端-商品管理", description = "商品CRUD、上下架、删除")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'MERCHANT')")
 public class AdminProductController {
 
     private final ProductService productService;
@@ -60,5 +63,11 @@ public class AdminProductController {
     public Result<Void> delete(@PathVariable("id") Long id) {
         productService.delete(id);
         return Result.success();
+    }
+
+    @GetMapping("/spec-groups")
+    @Operation(summary = "获取分类规格参数")
+    public Result<List<SpecGroupVO>> getSpecGroups(@RequestParam("categoryId") Long categoryId) {
+        return Result.success(productService.getSpecGroupsByCategory(categoryId));
     }
 }

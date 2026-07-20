@@ -13,6 +13,7 @@ public class CategoryVO {
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long parentId;
     private Integer level;
+    private String categoryPath;
     private Integer sort;
     private String icon;
     private List<CategoryVO> children;

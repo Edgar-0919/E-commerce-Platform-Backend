@@ -15,6 +15,7 @@ public class Category {
     private String name;
     private Long parentId;
     private Integer level;
+    private String categoryPath;
     private Integer sort;
     private String icon;
     private LocalDateTime createTime;
